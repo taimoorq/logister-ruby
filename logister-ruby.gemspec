@@ -13,7 +13,7 @@ Gem::Specification.new do |spec|
   spec.required_ruby_version = '>= 3.1.0'
 
   spec.metadata['homepage_uri'] = spec.homepage
-  spec.metadata['source_code_uri'] = 'https://logister.org'
+  spec.metadata['source_code_uri'] = 'https://github.com/taimoorq/logister-ruby'
 
   spec.files = Dir.chdir(__dir__) do
     Dir.glob('lib/**/*') + ['README.md', 'logister-ruby.gemspec']
@@ -22,4 +22,5 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   spec.add_dependency 'activesupport', '>= 6.1'
+  spec.add_development_dependency 'rake', '>= 13.0'
 end

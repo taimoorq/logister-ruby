@@ -68,3 +68,15 @@ Logister.report_metric(
   tags: { region: "us-east-1" }
 )
 ```
+
+## Release
+
+Use Bundler's built-in release flow:
+
+```bash
+# 1) bump version in lib/logister/version.rb
+# 2) commit changes
+bundle exec rake release
+```
+
+`rake release` will build the gem, create a git tag, push commits/tags, and push to RubyGems.
