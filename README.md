@@ -56,6 +56,20 @@ end
 
 If Rails is present, the gem installs middleware that reports unhandled exceptions automatically.
 
+## Database load metrics (ActiveRecord)
+
+You can capture SQL timing metrics using ActiveSupport notifications:
+
+```ruby
+Logister.configure do |config|
+  config.capture_db_metrics = true
+  config.db_metric_min_duration_ms = 10.0
+  config.db_metric_sample_rate = 1.0
+end
+```
+
+This emits metric events with `message: "db.query"` and context fields such as `duration_ms`, `name`, `sql`, and `binds_count`.
+
 ## Manual reporting
 
 ```ruby

@@ -17,6 +17,11 @@ Logister.configure do |config|
   config.ignore_exceptions = []
   config.ignore_paths = []
 
+  # Optional ActiveRecord SQL instrumentation.
+  config.capture_db_metrics = false
+  config.db_metric_min_duration_ms = 10.0
+  config.db_metric_sample_rate = 1.0
+
   config.before_notify = lambda do |payload|
     payload
   end

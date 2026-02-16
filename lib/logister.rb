@@ -3,6 +3,7 @@ require_relative 'logister/configuration'
 require_relative 'logister/client'
 require_relative 'logister/reporter'
 require_relative 'logister/middleware'
+require_relative 'logister/sql_subscriber'
 
 module Logister
   class << self

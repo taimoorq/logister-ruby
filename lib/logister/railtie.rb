@@ -21,11 +21,18 @@ module Logister
         copy_setting(app, config, :queue_size)
         copy_setting(app, config, :max_retries)
         copy_setting(app, config, :retry_base_interval)
+        copy_setting(app, config, :capture_db_metrics)
+        copy_setting(app, config, :db_metric_min_duration_ms)
+        copy_setting(app, config, :db_metric_sample_rate)
       end
     end
 
     initializer 'logister.middleware' do |app|
       app.middleware.use Logister::Middleware
+    end
+
+    initializer 'logister.sql_subscriber' do
+      Logister::SqlSubscriber.install!
     end
 
     private
