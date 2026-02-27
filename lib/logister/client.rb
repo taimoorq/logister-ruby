@@ -1,15 +1,25 @@
+# frozen_string_literal: true
+
 require 'json'
 require 'net/http'
 require 'uri'
 
 module Logister
   class Client
+    CONTENT_TYPE = 'application/json'
+
     def initialize(configuration)
       @configuration = configuration
-      @worker_mutex = Mutex.new
-      @queue = SizedQueue.new(@configuration.queue_size)
-      @worker = nil
-      @running = false
+      @worker_mutex  = Mutex.new
+      @queue         = SizedQueue.new(@configuration.queue_size)
+      @worker        = nil
+      @running       = false
+
+      # Cache values that are static for the lifetime of this client so we
+      # don't allocate on every send_request call.
+      @uri         = URI.parse(@configuration.endpoint).freeze
+      @use_ssl     = @uri.scheme == 'https'
+      @auth_header = "Bearer #{@configuration.api_key}".freeze
     end
 
     def publish(payload)
@@ -24,9 +34,9 @@ module Logister
     def flush(timeout: 2)
       return true unless @configuration.async
 
-      started_at = monotonic_now
-      while @queue.length.positive?
-        return false if monotonic_now - started_at > timeout
+      deadline = monotonic_now + timeout
+      until @queue.empty?
+        return false if monotonic_now > deadline
 
         sleep(0.01)
       end
@@ -44,6 +54,7 @@ module Logister
         nil
       end
       @worker&.join(1)
+      @worker = nil
       true
     end
 
@@ -58,18 +69,20 @@ module Logister
     end
 
     def ensure_worker_started
+      # Fast path — no lock needed if already running (GVL-safe on MRI).
       return if @running && @worker&.alive?
 
       @worker_mutex.synchronize do
         return if @running && @worker&.alive?
 
         @running = true
-        @worker = Thread.new { run_worker }
+        @worker  = Thread.new { run_worker }
+        @worker.name = 'logister-worker'
       end
     end
 
     def run_worker
-      while @running
+      loop do
         payload = @queue.pop
         break if payload.nil?
 
@@ -77,6 +90,9 @@ module Logister
       end
     rescue StandardError => e
       @configuration.logger.warn("logister worker crashed: #{e.class} #{e.message}")
+    ensure
+      # Always clear running flag and attempt auto-restart after a crash so
+      # events enqueued after the crash are not silently dropped.
       @running = false
     end
 
@@ -97,16 +113,15 @@ module Logister
     end
 
     def send_request(payload)
-      uri = URI.parse(@configuration.endpoint)
-      request = Net::HTTP::Post.new(uri)
-      request['Content-Type'] = 'application/json'
-      request['Authorization'] = "Bearer #{@configuration.api_key}"
-      request.body = { event: payload }.to_json
+      request = Net::HTTP::Post.new(@uri)
+      request['Content-Type']  = CONTENT_TYPE
+      request['Authorization'] = @auth_header
+      request.body             = { event: payload }.to_json
 
       response = Net::HTTP.start(
-        uri.host,
-        uri.port,
-        use_ssl: uri.scheme == 'https',
+        @uri.host,
+        @uri.port,
+        use_ssl:      @use_ssl,
         open_timeout: @configuration.timeout_seconds,
         read_timeout: @configuration.timeout_seconds
       ) { |http| http.request(request) }
@@ -121,7 +136,7 @@ module Logister
     end
 
     def ready?
-      @configuration.enabled && @configuration.api_key.to_s != ''
+      @configuration.enabled && !@configuration.api_key.to_s.empty?
     end
   end
 end

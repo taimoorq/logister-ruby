@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'rails/railtie'
 
 module Logister
@@ -38,10 +40,10 @@ module Logister
     private
 
     def copy_setting(app, config, key)
-      value = app.config.logister.send(key)
+      value = app.config.logister.public_send(key)
       return if value.nil?
 
-      config.send("#{key}=", value)
+      config.public_send(:"#{key}=", value)
     end
   end
 end

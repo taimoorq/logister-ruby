@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative 'logister/version'
 require_relative 'logister/configuration'
 require_relative 'logister/client'
