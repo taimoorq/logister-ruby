@@ -28,6 +28,14 @@ module Logister
       reporter.report_metric(**kwargs)
     end
 
+    def set_user(id: nil, email: nil, name: nil, **extra)
+      reporter.set_user(id: id, email: email, name: name, **extra)
+    end
+
+    def clear_user
+      reporter.clear_user
+    end
+
     def flush(timeout: 2)
       reporter.flush(timeout: timeout)
     end
