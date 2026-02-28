@@ -2,6 +2,12 @@
 
 `logister-ruby` sends application errors and custom metrics to `logister.org`.
 
+## Self-hosted backend
+
+Use the open source Logister app repository to self-host the ingestion UI/API backend:
+
+- App source: https://github.com/taimoorq/logister
+
 ## Install
 
 ```ruby
