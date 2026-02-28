@@ -1,6 +1,5 @@
-# frozen_string_literal: true
-
 require 'rails/railtie'
+require_relative 'active_job_reporter'
 
 module Logister
   class Railtie < Rails::Railtie
@@ -26,6 +25,13 @@ module Logister
         copy_setting(app, config, :capture_db_metrics)
         copy_setting(app, config, :db_metric_min_duration_ms)
         copy_setting(app, config, :db_metric_sample_rate)
+        copy_setting(app, config, :feature_flags_resolver)
+        copy_setting(app, config, :dependency_resolver)
+        copy_setting(app, config, :anonymize_ip)
+        copy_setting(app, config, :max_breadcrumbs)
+        copy_setting(app, config, :max_dependencies)
+        copy_setting(app, config, :capture_sql_breadcrumbs)
+        copy_setting(app, config, :sql_breadcrumb_min_duration_ms)
       end
     end
 
@@ -37,13 +43,23 @@ module Logister
       Logister::SqlSubscriber.install!
     end
 
+    initializer "logister.request_subscriber" do
+      Logister::RequestSubscriber.install!
+    end
+
+    initializer "logister.active_job_reporter" do
+      ActiveSupport.on_load(:active_job) do
+        Logister::ActiveJobReporter.install!
+      end
+    end
+
     private
 
     def copy_setting(app, config, key)
-      value = app.config.logister.public_send(key)
+      value = app.config.logister.send(key)
       return if value.nil?
 
-      config.public_send(:"#{key}=", value)
+      config.send("#{key}=", value)
     end
   end
 end
