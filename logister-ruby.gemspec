@@ -16,7 +16,7 @@ Gem::Specification.new do |spec|
   spec.metadata['source_code_uri'] = 'https://github.com/taimoorq/logister-ruby'
 
   spec.files = Dir.chdir(__dir__) do
-    Dir.glob('lib/**/*') + ['README.md', 'logister-ruby.gemspec']
+    Dir.glob('lib/**/*') + ['README.md', 'LICENSE', 'logister-ruby.gemspec']
   end
 
   spec.require_paths = ['lib']

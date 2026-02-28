@@ -1,0 +1,17 @@
+/.bundle/
+/vendor/bundle/
+
+# Build artifacts
+/pkg/
+/*.gem
+/*.zip
+
+# Local env/config
+/.env
+/.env.*
+
+# macOS metadata
+.DS_Store
+__MACOSX/
+*/.DS_Store
+*/__MACOSX/
