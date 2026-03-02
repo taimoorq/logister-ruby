@@ -134,6 +134,25 @@ Logister.report_metric(
   context: { duration_ms: 123 },
   tags: { region: "us-east-1" }
 )
+
+Logister.report_transaction(
+  name: "POST /checkout",
+  duration_ms: 184.7,
+  status: 200,
+  context: { trace_id: "trace-123", request_id: "req-123" }
+)
+
+Logister.report_log(
+  message: "payment provider timeout",
+  level: "warn",
+  context: { trace_id: "trace-123", request_id: "req-123", user_id: 42 }
+)
+
+Logister.report_check_in(
+  slug: "nightly-reconcile",
+  status: "ok",
+  expected_interval_seconds: 900
+)
 ```
 
 ## Release
