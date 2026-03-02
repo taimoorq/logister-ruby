@@ -31,6 +31,18 @@ module Logister
       reporter.report_metric(**kwargs)
     end
 
+    def report_transaction(**kwargs)
+      reporter.report_transaction(**kwargs)
+    end
+
+    def report_log(**kwargs)
+      reporter.report_log(**kwargs)
+    end
+
+    def report_check_in(**kwargs)
+      reporter.report_check_in(**kwargs)
+    end
+
     def flush(timeout: 2)
       reporter.flush(timeout: timeout)
     end

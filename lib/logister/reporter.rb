@@ -84,6 +84,69 @@ module Logister
       @client.publish(payload)
     end
 
+    def report_transaction(name:, duration_ms:, level: 'info', context: {}, tags: {}, fingerprint: nil, status: nil)
+      return false if ignored_environment?
+      return false if ignored_path?(context)
+
+      payload = build_payload(
+        event_type:  'transaction',
+        level:       level,
+        message:     name,
+        fingerprint: fingerprint || metric_fingerprint("tx:#{name}"),
+        context:     context.merge(
+          transaction_name: name,
+          duration_ms: duration_ms,
+          status: status,
+          tags: tags
+        ).compact
+      )
+
+      payload = apply_before_notify(payload)
+      return false unless payload
+
+      @client.publish(payload)
+    end
+
+    def report_log(message:, level: 'info', context: {}, tags: {}, fingerprint: nil)
+      return false if ignored_environment?
+      return false if ignored_path?(context)
+
+      payload = build_payload(
+        event_type:  'log',
+        level:       level,
+        message:     message,
+        fingerprint: fingerprint || metric_fingerprint("log:#{message.to_s.lines.first}"),
+        context:     context.merge(tags: tags)
+      )
+
+      payload = apply_before_notify(payload)
+      return false unless payload
+
+      @client.publish(payload)
+    end
+
+    def report_check_in(slug:, status: 'ok', expected_interval_seconds: 300, duration_ms: nil, context: {}, level: nil)
+      return false if ignored_environment?
+
+      payload = build_payload(
+        event_type:  'check_in',
+        level:       level || (status.to_s == 'error' ? 'error' : 'info'),
+        message:     slug,
+        fingerprint: metric_fingerprint("checkin:#{slug}"),
+        context:     context.merge(
+          check_in_slug: slug,
+          check_in_status: status,
+          expected_interval_seconds: expected_interval_seconds,
+          duration_ms: duration_ms
+        ).compact
+      )
+
+      payload = apply_before_notify(payload)
+      return false unless payload
+
+      @client.publish(payload)
+    end
+
     # Store user info for the current thread so it is automatically attached to
     # every error reported during this request.
     #
