@@ -155,6 +155,13 @@ Logister.report_check_in(
 )
 ```
 
+## Documentation
+
+- [Contributing](CONTRIBUTING.md) — how to contribute to the project
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Security Policy](SECURITY.md)
+- [Pull Request Template](.github/PULL_REQUEST_TEMPLATE.md)
+
 ## Release
 
 Use Bundler's built-in release flow:
