@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Run tests
+        run: bundle exec rake test
+
+      - name: Check gem builds
+        run: bundle exec rake build
+
+      - name: Check Ruby syntax
+        run: ruby -e 'files = Dir["lib/**/*.rb"] + Dir["test/**/*_test.rb"] + ["test/test_helper.rb"]; files.each { |f| RubyVM::InstructionSequence.compile_file(f) }; puts "ok files=#{files.size}"'

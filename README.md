@@ -1,6 +1,14 @@
 # logister-ruby
 
-`logister-ruby` sends application errors and custom metrics to `logister.org`.
+`logister-ruby` is the Ruby and Rails client for sending errors, logs, metrics, transactions, and check-ins to Logister.
+
+## What this gem is for
+
+Use this gem when you want a Ruby or Rails app to send telemetry into the Logister backend.
+
+- Main Logister app: https://github.com/taimoorq/logister
+- Ruby integration docs: https://docs.logister.org/integrations/ruby/
+- Product docs: https://docs.logister.org/
 
 ## Self-hosted backend
 
@@ -47,6 +55,8 @@ Logister.configure do |config|
 end
 ```
 
+If you are using a self-hosted Logister install, point `config.endpoint` at your own Logister host instead of `logister.org`.
+
 ## Reliability options
 
 ```ruby
@@ -76,7 +86,7 @@ end
 ## Rails auto-reporting
 
 If Rails is present, the gem installs middleware that reports unhandled exceptions automatically.
-It also attaches richer context (trace IDs, route/response/performance info, breadcrumbs, dependency calls, and user metadata when available).
+It also attaches richer context such as trace IDs, route/response/performance info, breadcrumbs, dependency calls, and user metadata when available.
 
 ## Database load metrics (ActiveRecord)
 
@@ -157,7 +167,9 @@ Logister.report_check_in(
 
 ## Documentation
 
-- [Contributing](CONTRIBUTING.md) — how to contribute to the project
+- Ruby integration docs: https://docs.logister.org/integrations/ruby/
+- Main Logister docs: https://docs.logister.org/
+- [Contributing](CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Security Policy](SECURITY.md)
 - [Pull Request Template](.github/PULL_REQUEST_TEMPLATE.md)
@@ -168,7 +180,8 @@ Use Bundler's built-in release flow:
 
 ```bash
 # 1) bump version in lib/logister/version.rb
-# 2) commit changes
+# 2) update CHANGELOG.md
+# 3) commit changes
 bundle exec rake release
 ```
 
