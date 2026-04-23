@@ -4,6 +4,22 @@
 
 Install it from RubyGems as `logister-ruby`.
 
+## Table Of Contents
+
+- [What this gem is for](#what-this-gem-is-for)
+- [Self-hosted backend](#self-hosted-backend)
+- [Install From RubyGems](#install-from-rubygems)
+- [Configuration](#configuration)
+- [Reliability options](#reliability-options)
+- [Filtering and redaction](#filtering-and-redaction)
+- [Rails auto-reporting](#rails-auto-reporting)
+- [Database load metrics (ActiveRecord)](#database-load-metrics-activerecord)
+- [Breadcrumbs and dependencies](#breadcrumbs-and-dependencies)
+- [ActiveJob error context](#activejob-error-context)
+- [Manual reporting](#manual-reporting)
+- [Documentation](#documentation)
+- [Release](#release)
+
 ## What this gem is for
 
 Use this gem when you want a Ruby or Rails app to send telemetry into the Logister backend.
