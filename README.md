@@ -2,6 +2,8 @@
 
 `logister-ruby` is the Ruby and Rails client for sending errors, logs, metrics, transactions, and check-ins to Logister.
 
+Install it from RubyGems as `logister-ruby`.
+
 ## What this gem is for
 
 Use this gem when you want a Ruby or Rails app to send telemetry into the Logister backend.
@@ -9,6 +11,7 @@ Use this gem when you want a Ruby or Rails app to send telemetry into the Logist
 - Main Logister app: https://github.com/taimoorq/logister
 - Ruby integration docs: https://docs.logister.org/integrations/ruby/
 - Product docs: https://docs.logister.org/
+- RubyGems package: https://rubygems.org/gems/logister-ruby
 
 ## Self-hosted backend
 
@@ -16,10 +19,24 @@ Use the open source Logister app repository to self-host the ingestion UI/API ba
 
 - App source: https://github.com/taimoorq/logister
 
-## Install
+## Install From RubyGems
+
+With Bundler in a Rails or Ruby app:
 
 ```ruby
 gem "logister-ruby"
+```
+
+Then install:
+
+```bash
+bundle install
+```
+
+Or install the gem directly from RubyGems:
+
+```bash
+gem install logister-ruby
 ```
 
 Then generate an initializer in Rails:
