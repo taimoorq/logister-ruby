@@ -120,6 +120,7 @@ end
 
 If Rails is present, the gem installs middleware that reports unhandled exceptions automatically.
 It also attaches richer context such as trace IDs, route/response/performance info, breadcrumbs, dependency calls, and user metadata when available.
+Manual `Logister.report_error` calls use the same shared enrichment path, so Ruby apps get runtime, deployment, breadcrumb, dependency, user, and nested exception cause context even when an error is reported outside the Rails middleware.
 
 ## Database load metrics (ActiveRecord)
 
@@ -173,6 +174,8 @@ Logister.report_error(StandardError.new("Something failed"), tags: { area: "chec
 
 Logister.report_metric(
   message: "checkout.completed",
+  value: 1,
+  unit: "count",
   level: "info",
   context: { duration_ms: 123 },
   tags: { region: "us-east-1" }
@@ -194,7 +197,10 @@ Logister.report_log(
 Logister.report_check_in(
   slug: "nightly-reconcile",
   status: "ok",
-  expected_interval_seconds: 900
+  expected_interval_seconds: 900,
+  duration_ms: 248.3,
+  trace_id: "trace-123",
+  request_id: "req-123"
 )
 ```
 
@@ -209,7 +215,7 @@ Logister.report_check_in(
 
 ## Release
 
-Use Bundler's built-in release flow:
+This repo runs CI on commits and pull requests, but it does not publish to RubyGems automatically from GitHub Actions. Use Bundler's built-in release flow when you intentionally want a RubyGems release:
 
 ```bash
 # 1) bump version in lib/logister/version.rb

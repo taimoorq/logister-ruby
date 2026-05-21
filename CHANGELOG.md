@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.2.5 - 2026-05-21
+
+- Added metric value/unit options to `Logister.report_metric` while keeping the existing context/tags API.
+- Added per-check-in environment, release, occurred-at, trace ID, and request ID options to `Logister.report_check_in`.
+
+## v0.2.4 - 2026-05-21
+
+- Enriched every Ruby error report with shared runtime, deployment, breadcrumb, and dependency context, including manual `Logister.report_error` calls.
+- Added structured nested exception cause data to Ruby error payloads.
+
 ## v0.2.3 - 2026-04-22
 
 - Refined the Ruby and Rails client for Logister event delivery.

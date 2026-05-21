@@ -3,6 +3,8 @@
 require 'digest'
 require 'time'
 require 'set'
+require_relative 'context_helpers'
+require_relative 'context_store'
 
 module Logister
   class Reporter
@@ -41,7 +43,7 @@ module Logister
       return false if ignored_exception?(exception)
       return false if ignored_path?(context)
 
-      merged_context = context.dup
+      merged_context = default_error_context.merge(context)
       user = current_user_context
       merged_context[:user] = user if user
 
@@ -51,11 +53,7 @@ module Logister
         message:     "#{exception.class}: #{exception.message}",
         fingerprint: fingerprint || default_fingerprint(exception),
         context:     merged_context.merge(
-          exception: {
-            class:     exception.class.to_s,
-            message:   exception.message.to_s,
-            backtrace: Array(exception.backtrace).first(50)
-          },
+          exception: exception_context(exception),
           tags: tags
         )
       )
@@ -66,16 +64,29 @@ module Logister
       @client.publish(payload)
     end
 
-    def report_metric(message:, level: 'info', context: {}, tags: {}, fingerprint: nil)
+    def report_metric(message:, value: nil, unit: nil, level: 'info', context: {}, tags: {}, fingerprint: nil)
       return false if ignored_environment?
       return false if ignored_path?(context)
+
+      metric_context = context.merge(tags: tags)
+      if value
+        metric_context = metric_context.merge(
+          metric: {
+            name: message,
+            value: value,
+            unit: unit
+          }.compact,
+          value: value,
+          unit: unit
+        ).compact
+      end
 
       payload = build_payload(
         event_type:  'metric',
         level:       level,
         message:     message,
         fingerprint: fingerprint || metric_fingerprint(message),
-        context:     context.merge(tags: tags)
+        context:     metric_context
       )
 
       payload = apply_before_notify(payload)
@@ -125,7 +136,19 @@ module Logister
       @client.publish(payload)
     end
 
-    def report_check_in(slug:, status: 'ok', expected_interval_seconds: 300, duration_ms: nil, context: {}, level: nil)
+    def report_check_in(
+      slug:,
+      status: 'ok',
+      expected_interval_seconds: 300,
+      duration_ms: nil,
+      context: {},
+      level: nil,
+      environment: nil,
+      release: nil,
+      occurred_at: nil,
+      trace_id: nil,
+      request_id: nil
+    )
       return false if ignored_environment?
 
       payload = build_payload(
@@ -137,9 +160,14 @@ module Logister
           check_in_slug: slug,
           check_in_status: status,
           expected_interval_seconds: expected_interval_seconds,
-          duration_ms: duration_ms
+          duration_ms: duration_ms,
+          environment: environment,
+          release: release,
+          trace_id: trace_id,
+          request_id: request_id
         ).compact
       )
+      payload[:occurred_at] = normalize_timestamp(occurred_at) if occurred_at
 
       payload = apply_before_notify(payload)
       return false unless payload
@@ -185,6 +213,31 @@ module Logister
       Thread.current[:logister_user]
     end
 
+    def default_error_context
+      Logister::ContextHelpers.compact_deep(
+        {
+          breadcrumbs: Logister::ContextStore.breadcrumbs.presence,
+          dependencyCalls: Logister::ContextStore.dependencies.presence
+        }
+          .merge(Logister::ContextHelpers.runtime_context)
+          .merge(Logister::ContextHelpers.deployment_context)
+      )
+    rescue StandardError => e
+      @configuration.logger.warn("logister default error context failed: #{e.class} #{e.message}")
+      {}
+    end
+
+    def exception_context(exception, depth = 0)
+      return nil unless exception
+
+      {
+        class:     exception.class.to_s,
+        message:   exception.message.to_s,
+        backtrace: Array(exception.backtrace).first(50),
+        cause:     depth < 5 ? exception_context(exception.cause, depth + 1) : nil
+      }.compact
+    end
+
     def build_payload(event_type:, level:, message:, fingerprint:, context:)
       {
         event_type:  event_type,
@@ -197,6 +250,10 @@ module Logister
         # is frozen and reused — only the new outer Hash is allocated.
         context:     @static_context.merge(context)
       }
+    end
+
+    def normalize_timestamp(timestamp)
+      timestamp.respond_to?(:utc) ? timestamp.utc.iso8601 : timestamp.to_s
     end
 
     def apply_before_notify(payload)
