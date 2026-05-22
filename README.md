@@ -17,6 +17,7 @@ Install it from RubyGems as `logister-ruby`.
 - [Breadcrumbs and dependencies](#breadcrumbs-and-dependencies)
 - [ActiveJob error context](#activejob-error-context)
 - [Manual reporting](#manual-reporting)
+- [Using project Insights beta](#using-project-insights-beta)
 - [Documentation](#documentation)
 - [Release](#release)
 
@@ -204,9 +205,78 @@ Logister.report_check_in(
 )
 ```
 
+## Using project Insights beta
+
+The Logister project Insights tab combines Inbox, Activity, and Performance signals into live dashboard views. Ruby apps get the most useful Insights experience when every event carries stable deployment context plus a few low-cardinality custom attributes.
+
+Use `config.environment`, `config.release`, and top-level scalar `context` values for the dimensions you want to filter by:
+
+```ruby
+Logister.configure do |config|
+  config.environment = Rails.env
+  config.release = ENV["RELEASE_SHA"]
+  config.service = "billing-web"
+end
+
+Logister.report_metric(
+  message: "queue.depth",
+  value: Sidekiq::Queue.new("billing").size,
+  unit: "jobs",
+  context: {
+    service: "billing-worker",
+    queue: "billing",
+    region: "us-east-1",
+    tenant_tier: "enterprise"
+  }
+)
+
+Logister.report_transaction(
+  name: "POST /checkout",
+  duration_ms: 184.7,
+  status: 200,
+  context: {
+    service: "billing-web",
+    route: "POST /checkout",
+    feature_flag: "new_checkout",
+    tenant_tier: "enterprise"
+  }
+)
+
+Logister.report_log(
+  message: "payment provider retry",
+  level: "warn",
+  context: {
+    service: "billing-worker",
+    provider: "stripe",
+    queue: "billing"
+  }
+)
+
+Logister.report_check_in(
+  slug: "nightly-reconcile",
+  status: "ok",
+  expected_interval_seconds: 3600,
+  duration_ms: 842.7,
+  context: {
+    service: "billing-worker",
+    queue: "reconcile"
+  }
+)
+```
+
+Practical Insights recipes:
+
+- Release validation: send `release`, then filter the Insights tab to the new release and compare errors, transaction P95, database query timing, and custom metrics.
+- Queue monitoring: report metrics such as `queue.depth`, `queue.latency`, and `jobs.retry_count` with a stable `queue` context key.
+- Performance triage: send transaction events with `route`, `service`, and `tenant_tier` so slow routes can be filtered beside errors and logs.
+- Instrumentation audit: open Insights after deploy and confirm errors, logs, metrics, transactions, and check-ins all appear in the recent stream.
+
+Keep dashboard dimensions stable and low-cardinality. Good custom attribute keys include `service`, `region`, `queue`, `route`, `tenant_tier`, `provider`, and `feature_flag`. Avoid raw IDs, emails, request bodies, SQL text, and per-user values as top-level Insights dimensions.
+
 ## Documentation
 
 - Ruby integration docs: https://docs.logister.org/integrations/ruby/
+- Insights beta guide: https://docs.logister.org/product/#insights-beta
 - Main Logister docs: https://docs.logister.org/
 - [Contributing](CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)

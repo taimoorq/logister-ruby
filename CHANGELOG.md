@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.2.6 - 2026-05-22
+
+- Added README guidance for using Ruby reports with the Logister project Insights beta, including practical metric, transaction, log, check-in, and custom attribute examples.
+
 ## v0.2.5 - 2026-05-21
 
 - Added metric value/unit options to `Logister.report_metric` while keeping the existing context/tags API.
