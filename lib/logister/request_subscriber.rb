@@ -53,8 +53,39 @@ module Logister
             viewRuntimeMs: numeric(payload[:view_runtime])
           }.compact
         )
+
+        report_request_span(payload, request_id) if capture_request_spans?
       rescue StandardError => e
         logger.warn("logister request subscriber (process_action) failed: #{e.class} #{e.message}")
+      end
+
+      def report_request_span(payload, request_id)
+        duration_ms = numeric(payload[:duration])
+        return unless duration_ms&.positive?
+
+        route = "#{payload[:controller]}##{payload[:action]}"
+        started_at = Time.now.utc - (duration_ms / 1000.0)
+
+        Logister.report_span(
+          name: route,
+          kind: "server",
+          status: payload[:status].to_i >= 500 ? "error" : "ok",
+          trace_id: request_id,
+          request_id: request_id,
+          duration_ms: duration_ms,
+          started_at: started_at,
+          context: {
+            route: route,
+            request_id: request_id,
+            method: payload[:method],
+            path: payload[:path],
+            status: payload[:status],
+            timing_breakdown: {
+              db: numeric(payload[:db_runtime]),
+              render: numeric(payload[:view_runtime])
+            }.compact
+          }
+        )
       end
 
       def handle_sql_breadcrumb(started, finished, payload)
@@ -92,6 +123,12 @@ module Logister
         Logister.configuration
       rescue StandardError
         nil
+      end
+
+      def capture_request_spans?
+        configuration&.capture_request_spans
+      rescue StandardError
+        false
       end
 
       def logger

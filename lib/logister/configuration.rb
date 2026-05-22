@@ -7,7 +7,7 @@ module Logister
                   :async, :queue_size, :max_retries, :retry_base_interval,
                   :capture_db_metrics, :db_metric_min_duration_ms, :db_metric_sample_rate,
                   :feature_flags_resolver, :dependency_resolver, :anonymize_ip,
-                  :max_breadcrumbs, :max_dependencies,
+                  :max_breadcrumbs, :max_dependencies, :capture_request_spans,
                   :capture_sql_breadcrumbs, :sql_breadcrumb_min_duration_ms
 
     def initialize
@@ -40,6 +40,7 @@ module Logister
       @anonymize_ip = false
       @max_breadcrumbs = 40
       @max_dependencies = 20
+      @capture_request_spans = false
       @capture_sql_breadcrumbs = true
       @sql_breadcrumb_min_duration_ms = 25.0
     end

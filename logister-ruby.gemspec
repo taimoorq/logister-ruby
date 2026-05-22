@@ -7,7 +7,7 @@ Gem::Specification.new do |spec|
   spec.email = ['support@logister.org']
 
   spec.summary = 'Ruby and Rails client for sending events to Logister'
-  spec.description = 'Ruby and Rails client for reporting errors, logs, metrics, transactions, and check-ins to the Logister backend, including self-hosted installs.'
+  spec.description = 'Ruby and Rails client for reporting errors, logs, metrics, transactions, spans, and check-ins to the Logister backend, including self-hosted installs.'
   spec.homepage = 'https://github.com/taimoorq/logister-ruby'
   spec.license = 'MIT'
   spec.required_ruby_version = '>= 3.1.0'

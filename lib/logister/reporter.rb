@@ -3,6 +3,7 @@
 require 'digest'
 require 'time'
 require 'set'
+require 'securerandom'
 require_relative 'context_helpers'
 require_relative 'context_store'
 
@@ -111,6 +112,65 @@ module Logister
           tags: tags
         ).compact
       )
+
+      payload = apply_before_notify(payload)
+      return false unless payload
+
+      @client.publish(payload)
+    end
+
+    def report_span(
+      name:,
+      duration_ms:,
+      trace_id: nil,
+      request_id: nil,
+      span_id: nil,
+      parent_span_id: nil,
+      kind: 'internal',
+      status: nil,
+      started_at: nil,
+      ended_at: nil,
+      context: {},
+      tags: {},
+      fingerprint: nil
+    )
+      return false if ignored_environment?
+      return false if ignored_path?(context)
+
+      started_at ||= Time.now.utc - (duration_ms.to_f / 1000.0)
+      span_id ||= SecureRandom.hex(8)
+      trace_id ||= span_id
+
+      payload = build_payload(
+        event_type: 'span',
+        level: status.to_s == 'error' ? 'error' : 'info',
+        message: name,
+        fingerprint: fingerprint || metric_fingerprint("span:#{kind}:#{name}"),
+        context: context.merge(
+          name: name,
+          trace_id: trace_id,
+          request_id: request_id,
+          span_id: span_id,
+          parent_span_id: parent_span_id,
+          span_kind: kind,
+          kind: kind,
+          status: status,
+          duration_ms: duration_ms,
+          started_at: normalize_timestamp(started_at),
+          ended_at: ended_at && normalize_timestamp(ended_at),
+          tags: tags
+        ).compact
+      )
+
+      payload[:started_at] = normalize_timestamp(started_at)
+      payload[:ended_at] = normalize_timestamp(ended_at) if ended_at
+      payload[:duration_ms] = duration_ms
+      payload[:trace_id] = trace_id
+      payload[:request_id] = request_id if request_id
+      payload[:span_id] = span_id
+      payload[:parent_span_id] = parent_span_id if parent_span_id
+      payload[:kind] = kind
+      payload[:status] = status if status
 
       payload = apply_before_notify(payload)
       return false unless payload

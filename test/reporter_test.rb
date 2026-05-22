@@ -95,6 +95,46 @@ class ReporterTest < Minitest::Test
     assert_equal "req-123", context.fetch(:request_id)
   end
 
+  def test_report_span_emits_trace_timing_payload
+    captured_payload = nil
+    started_at = Time.utc(2026, 5, 22, 12, 0, 0)
+    Logister.configure do |config|
+      config.before_notify = lambda do |payload|
+        captured_payload = payload
+        false
+      end
+    end
+
+    Logister.report_span(
+      name: "GET /checkout",
+      kind: "server",
+      duration_ms: 245.7,
+      trace_id: "trace-123",
+      request_id: "req-123",
+      span_id: "span-root",
+      started_at: started_at,
+      context: {
+        route: "GET /checkout",
+        timing_breakdown: { db: 40.2, render: 80.0 }
+      }
+    )
+
+    refute_nil captured_payload
+    context = captured_payload.fetch(:context)
+    assert_equal "span", captured_payload.fetch(:event_type)
+    assert_equal "GET /checkout", captured_payload.fetch(:message)
+    assert_equal 245.7, captured_payload.fetch(:duration_ms)
+    assert_equal "trace-123", captured_payload.fetch(:trace_id)
+    assert_equal "req-123", captured_payload.fetch(:request_id)
+    assert_equal "span-root", captured_payload.fetch(:span_id)
+    assert_equal "server", captured_payload.fetch(:kind)
+    assert_equal "trace-123", context.fetch(:trace_id)
+    assert_equal "req-123", context.fetch(:request_id)
+    assert_equal "span-root", context.fetch(:span_id)
+    assert_equal "server", context.fetch(:span_kind)
+    assert_equal({ db: 40.2, render: 80.0 }, context.fetch(:timing_breakdown))
+  end
+
   private
 
   def nested_error

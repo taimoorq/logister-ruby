@@ -1,6 +1,6 @@
 # logister-ruby
 
-`logister-ruby` is the Ruby and Rails client for sending errors, logs, metrics, transactions, and check-ins to Logister.
+`logister-ruby` is the Ruby and Rails client for sending errors, logs, metrics, transactions, spans, and check-ins to Logister.
 
 Install it from RubyGems as `logister-ruby`.
 
@@ -86,6 +86,7 @@ Logister.configure do |config|
   config.max_dependencies = 20
   config.capture_sql_breadcrumbs = true
   config.sql_breadcrumb_min_duration_ms = 25.0
+  config.capture_request_spans = true
 
   config.feature_flags_resolver = lambda do |request:, user:, **|
     { new_checkout: user&.respond_to?(:beta?) && user.beta? }
@@ -129,6 +130,7 @@ end
 
 If Rails is present, the gem installs middleware that reports unhandled exceptions automatically.
 It also attaches richer context such as trace IDs, route/response/performance info, breadcrumbs, dependency calls, and user metadata when available.
+Set `config.capture_request_spans = true` to emit root `server` spans for request load waterfall charts while keeping existing transaction events.
 Manual `Logister.report_error` calls use the same shared enrichment path, so Ruby apps get runtime, deployment, breadcrumb, dependency, user, and nested exception cause context even when an error is reported outside the Rails middleware.
 
 ## Database load metrics (ActiveRecord)
@@ -195,6 +197,16 @@ Logister.report_transaction(
   duration_ms: 184.7,
   status: 200,
   context: { trace_id: "trace-123", request_id: "req-123" }
+)
+
+Logister.report_span(
+  name: "render checkout",
+  duration_ms: 82.1,
+  trace_id: "trace-123",
+  parent_span_id: "span-root",
+  kind: "render",
+  status: "ok",
+  context: { route: "POST /checkout" }
 )
 
 Logister.report_log(
@@ -277,7 +289,7 @@ Practical Insights recipes:
 - Release validation: send `release`, then filter the Insights tab to the new release and compare errors, transaction P95, database query timing, and custom metrics.
 - Queue monitoring: report metrics such as `queue.depth`, `queue.latency`, and `jobs.retry_count` with a stable `queue` context key.
 - Performance triage: send transaction events with `route`, `service`, and `tenant_tier` so slow routes can be filtered beside errors and logs.
-- Instrumentation audit: open Insights after deploy and confirm errors, logs, metrics, transactions, and check-ins all appear in the recent stream.
+- Instrumentation audit: open Insights after deploy and confirm errors, logs, metrics, transactions, spans, and check-ins all appear in the recent stream.
 
 Keep dashboard dimensions stable and low-cardinality. Good custom attribute keys include `service`, `region`, `queue`, `route`, `tenant_tier`, `provider`, and `feature_flag`. Avoid raw IDs, emails, request bodies, SQL text, and per-user values as top-level Insights dimensions.
 

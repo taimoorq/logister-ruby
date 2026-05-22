@@ -35,6 +35,10 @@ module Logister
       reporter.report_transaction(**kwargs)
     end
 
+    def report_span(**kwargs)
+      reporter.report_span(**kwargs)
+    end
+
     def report_log(**kwargs)
       reporter.report_log(**kwargs)
     end

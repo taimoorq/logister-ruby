@@ -30,6 +30,7 @@ module Logister
         copy_setting(app, config, :anonymize_ip)
         copy_setting(app, config, :max_breadcrumbs)
         copy_setting(app, config, :max_dependencies)
+        copy_setting(app, config, :capture_request_spans)
         copy_setting(app, config, :capture_sql_breadcrumbs)
         copy_setting(app, config, :sql_breadcrumb_min_duration_ms)
       end
