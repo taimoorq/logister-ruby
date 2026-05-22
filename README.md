@@ -312,8 +312,8 @@ This repo runs CI on commits and pull requests. Version tags run the release wor
 # 2) update CHANGELOG.md
 # 3) commit changes
 # 4) push a matching tag, for example:
-git tag -a v0.2.6 -m "Release logister-ruby v0.2.6"
-git push origin main v0.2.6
+git tag -a v0.2.7 -m "Release logister-ruby v0.2.7"
+git push origin main v0.2.7
 ```
 
 The `.github/workflows/release.yml` workflow verifies the tag matches `Logister::VERSION`, runs tests, builds the gem, publishes to RubyGems with trusted publishing, and then creates or updates the matching GitHub release from `CHANGELOG.md`.
