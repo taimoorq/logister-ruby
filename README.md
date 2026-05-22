@@ -7,6 +7,7 @@ Install it from RubyGems as `logister-ruby`.
 ## Table Of Contents
 
 - [What this gem is for](#what-this-gem-is-for)
+- [Package Links](#package-links)
 - [Self-hosted backend](#self-hosted-backend)
 - [Install From RubyGems](#install-from-rubygems)
 - [Configuration](#configuration)
@@ -29,6 +30,13 @@ Use this gem when you want a Ruby or Rails app to send telemetry into the Logist
 - Ruby integration docs: https://docs.logister.org/integrations/ruby/
 - Product docs: https://docs.logister.org/
 - RubyGems package: https://rubygems.org/gems/logister-ruby
+
+## Package Links
+
+- RubyGems package: https://rubygems.org/gems/logister-ruby
+- GitHub releases: https://github.com/taimoorq/logister-ruby/releases
+- Source repository: https://github.com/taimoorq/logister-ruby
+- Integration docs: https://docs.logister.org/integrations/ruby/
 
 ## Self-hosted backend
 
