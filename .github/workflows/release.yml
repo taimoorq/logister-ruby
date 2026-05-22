@@ -1,0 +1,115 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: .ruby-version
+          bundler-cache: true
+
+      - name: Verify tag matches gem version
+        run: |
+          ruby -Ilib -rlogister/version <<'RUBY'
+          expected_tag = "v#{Logister::VERSION}"
+          actual_tag = ENV.fetch("GITHUB_REF_NAME")
+
+          abort("Tag #{actual_tag} does not match gem version #{expected_tag}.") unless actual_tag == expected_tag
+          RUBY
+
+      - name: Run tests
+        run: bundle exec rake test
+
+      - name: Build gem
+        run: bundle exec rake build
+
+      - name: Check RubyGems package version
+        id: rubygems_package
+        run: |
+          ruby <<'RUBY' >> "$GITHUB_OUTPUT"
+          require "json"
+          require "net/http"
+
+          version = ENV.fetch("GITHUB_REF_NAME").delete_prefix("v")
+          uri = URI("https://rubygems.org/api/v1/versions/logister-ruby.json")
+          response = Net::HTTP.get_response(uri)
+          versions = response.is_a?(Net::HTTPSuccess) ? JSON.parse(response.body) : []
+          exists = versions.any? { |entry| entry.fetch("number") == version }
+
+          puts "exists=#{exists ? "true" : "false"}"
+          warn exists ? "logister-ruby #{version} already exists on RubyGems." : "logister-ruby #{version} is not published on RubyGems yet."
+          RUBY
+
+      - name: Publish gem with RubyGems trusted publishing
+        if: steps.rubygems_package.outputs.exists != 'true'
+        uses: rubygems/release-gem@v1
+
+      - name: Build release notes from changelog
+        id: release_notes
+        run: |
+          ruby <<'RUBY' > "$GITHUB_OUTPUT"
+          changelog_path = "CHANGELOG.md"
+          tag = ENV.fetch("GITHUB_REF_NAME")
+
+          abort("Missing #{changelog_path}") unless File.exist?(changelog_path)
+
+          current_header = nil
+          body_lines = []
+          found = false
+
+          File.readlines(changelog_path, chomp: true).each do |line|
+            if line.start_with?("## ")
+              break if found
+
+              current_header = line.sub(/\A##\s+/, "")
+              found = current_header.start_with?(tag)
+              next
+            end
+
+            body_lines << line if found
+          end
+
+          abort("Could not find release notes for #{tag} in #{changelog_path}") unless found
+
+          body = body_lines.join("\n").strip
+          body = "Release #{tag}" if body.empty?
+
+          puts "name=#{current_header}"
+          puts "body<<EOF"
+          puts body
+          puts "EOF"
+          RUBY
+
+      - name: Create or update GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" \
+              --title "${{ steps.release_notes.outputs.name }}" \
+              --notes "${{ steps.release_notes.outputs.body }}" \
+              --latest
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --title "${{ steps.release_notes.outputs.name }}" \
+              --notes "${{ steps.release_notes.outputs.body }}" \
+              --latest
+          fi

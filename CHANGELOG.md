@@ -3,6 +3,7 @@
 ## v0.2.6 - 2026-05-22
 
 - Added README guidance for using Ruby reports with the Logister project Insights beta, including practical metric, transaction, log, check-in, and custom attribute examples.
+- Added a tag-based release workflow that publishes the gem to RubyGems with trusted publishing and then creates or updates the matching GitHub release.
 
 ## v0.2.5 - 2026-05-21
 

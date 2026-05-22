@@ -285,13 +285,28 @@ Keep dashboard dimensions stable and low-cardinality. Good custom attribute keys
 
 ## Release
 
-This repo runs CI on commits and pull requests, but it does not publish to RubyGems automatically from GitHub Actions. Use Bundler's built-in release flow when you intentionally want a RubyGems release:
+This repo runs CI on commits and pull requests. Version tags run the release workflow so RubyGems and GitHub Releases stay aligned:
 
 ```bash
 # 1) bump version in lib/logister/version.rb
 # 2) update CHANGELOG.md
 # 3) commit changes
-bundle exec rake release
+# 4) push a matching tag, for example:
+git tag -a v0.2.6 -m "Release logister-ruby v0.2.6"
+git push origin main v0.2.6
 ```
 
-`rake release` will build the gem, create a git tag, push commits/tags, and push to RubyGems.
+The `.github/workflows/release.yml` workflow verifies the tag matches `Logister::VERSION`, runs tests, builds the gem, publishes to RubyGems with trusted publishing, and then creates or updates the matching GitHub release from `CHANGELOG.md`.
+
+Before tag releases can publish the gem, configure a RubyGems trusted publisher for:
+
+- GitHub owner: `taimoorq`
+- Repository: `logister-ruby`
+- Workflow file: `.github/workflows/release.yml`
+- Environment: leave blank unless you also add a GitHub release environment to the workflow
+
+Manual publishing is still possible with Bundler's built-in release flow when needed:
+
+```bash
+bundle exec rake release
+```
