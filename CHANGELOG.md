@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.8 - 2026-06-18
+
+- Added first-class source context configuration (`repository`, `commit_sha`, and `branch`) with `LOGISTER_*` and GitHub Actions environment variable support.
+- Added `Logister.record_deployment` for posting release-to-commit deployment records to Logister.
+
 ## v0.2.7 - 2026-05-22
 
 - Added `Logister.report_span` and opt-in Rails request span capture for request load waterfall charts.

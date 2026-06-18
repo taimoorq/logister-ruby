@@ -24,12 +24,18 @@ module Logister
       environment = config&.respond_to?(:environment) ? config.environment.to_s.presence : nil
       service = config&.respond_to?(:service) ? config.service.to_s.presence : nil
       release = config&.respond_to?(:release) ? config.release.to_s.presence : nil
+      repository = config&.respond_to?(:repository) ? config.repository.to_s.presence : nil
+      commit_sha = config&.respond_to?(:commit_sha) ? config.commit_sha.to_s.presence : nil
+      branch = config&.respond_to?(:branch) ? config.branch.to_s.presence : nil
 
       {
         deployment: {
           environment: environment || ENV["RAILS_ENV"].to_s.presence || ENV["RACK_ENV"].to_s.presence || "development",
           service: service || ENV["LOGISTER_SERVICE"].to_s.presence || "ruby-app",
           release: release || ENV["LOGISTER_RELEASE"].to_s.presence,
+          repository: repository || ENV["LOGISTER_REPOSITORY"].to_s.presence || ENV["GITHUB_REPOSITORY"].to_s.presence,
+          commit_sha: commit_sha || ENV["LOGISTER_COMMIT_SHA"].to_s.presence || ENV["GITHUB_SHA"].to_s.presence,
+          branch: branch || ENV["LOGISTER_BRANCH"].to_s.presence || ENV["GITHUB_REF_NAME"].to_s.presence,
           region: ENV["FLY_REGION"].to_s.presence || ENV["RAILS_REGION"].to_s.presence || ENV["AWS_REGION"].to_s.presence,
           hostname: Socket.gethostname.to_s.presence,
           processPid: Process.pid

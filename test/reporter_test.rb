@@ -59,6 +59,27 @@ class ReporterTest < Minitest::Test
     assert_equal "jobs", context.fetch(:unit)
   end
 
+  def test_report_log_includes_configured_source_context
+    captured_payload = nil
+    Logister.configure do |config|
+      config.repository = "acme/checkout"
+      config.commit_sha = "abc1234"
+      config.branch = "main"
+      config.before_notify = lambda do |payload|
+        captured_payload = payload
+        false
+      end
+    end
+
+    Logister.report_log(message: "worker started")
+
+    refute_nil captured_payload
+    context = captured_payload.fetch(:context)
+    assert_equal "acme/checkout", context.fetch(:repository)
+    assert_equal "abc1234", context.fetch(:commit_sha)
+    assert_equal "main", context.fetch(:branch)
+  end
+
   def test_report_check_in_accepts_delivery_options
     captured_payload = nil
     checked_at = Time.utc(2026, 5, 21, 12, 0, 0)

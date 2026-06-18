@@ -293,6 +293,33 @@ Practical Insights recipes:
 
 Keep dashboard dimensions stable and low-cardinality. Good custom attribute keys include `service`, `region`, `queue`, `route`, `tenant_tier`, `provider`, and `feature_flag`. Avoid raw IDs, emails, request bodies, SQL text, and per-user values as top-level Insights dimensions.
 
+## GitHub source context and deployments
+
+When a Logister project is connected to a GitHub repository, set source context once so error frames and releases can resolve to the exact commit:
+
+```ruby
+Logister.configure do |config|
+  config.repository = ENV["LOGISTER_REPOSITORY"] || ENV["GITHUB_REPOSITORY"]
+  config.commit_sha = ENV["LOGISTER_COMMIT_SHA"] || ENV["GITHUB_SHA"]
+  config.branch = ENV["LOGISTER_BRANCH"] || ENV["GITHUB_REF_NAME"]
+end
+```
+
+CI/CD can also record the release-to-commit mapping directly:
+
+```ruby
+Logister.record_deployment(
+  release: "checkout@2026.06.18",
+  environment: "production",
+  repository: "acme/checkout",
+  commit_sha: "4f8c2d1a9b7e6c5d4a3b2c1d0e9f8a7b6c5d4e3f",
+  branch: "main",
+  workflow_run_url: "https://github.com/acme/checkout/actions/runs/123"
+)
+```
+
+`config.deployment_endpoint` defaults to the configured ingest endpoint with `/ingest_events` replaced by `/deployments`. Set `LOGISTER_DEPLOYMENT_ENDPOINT` when your deployment endpoint cannot be derived from `LOGISTER_ENDPOINT`.
+
 ## Documentation
 
 - Ruby integration docs: https://docs.logister.org/integrations/ruby/
@@ -305,15 +332,15 @@ Keep dashboard dimensions stable and low-cardinality. Good custom attribute keys
 
 ## Release
 
-This repo runs CI on commits and pull requests. Version tags run the release workflow so RubyGems and GitHub Releases stay aligned:
+This repo runs CI on commits and pull requests. After CI passes on `main`, the release-from-main workflow creates the matching version tag. Version tags run the release workflow so RubyGems and GitHub Releases stay aligned:
 
 ```bash
 # 1) bump version in lib/logister/version.rb
 # 2) update CHANGELOG.md
 # 3) commit changes
-# 4) push a matching tag, for example:
-git tag -a v0.2.7 -m "Release logister-ruby v0.2.7"
-git push origin main v0.2.7
+# 4) merge to main, or push a matching tag manually:
+git tag -a v0.2.8 -m "Release logister-ruby v0.2.8"
+git push origin main v0.2.8
 ```
 
 The `.github/workflows/release.yml` workflow verifies the tag matches `Logister::VERSION`, runs tests, builds the gem, publishes to RubyGems with trusted publishing, and then creates or updates the matching GitHub release from `CHANGELOG.md`.

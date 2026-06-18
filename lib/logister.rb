@@ -47,6 +47,10 @@ module Logister
       reporter.report_check_in(**kwargs)
     end
 
+    def record_deployment(**kwargs)
+      reporter.record_deployment(**kwargs)
+    end
+
     def flush(timeout: 2)
       reporter.flush(timeout: timeout)
     end

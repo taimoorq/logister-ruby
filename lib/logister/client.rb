@@ -17,9 +17,11 @@ module Logister
 
       # Cache values that are static for the lifetime of this client so we
       # don't allocate on every send_request call.
-      @uri         = URI.parse(@configuration.endpoint).freeze
-      @use_ssl     = @uri.scheme == 'https'
-      @auth_header = "Bearer #{@configuration.api_key}".freeze
+      @uri            = URI.parse(@configuration.endpoint).freeze
+      @deployment_uri = URI.parse(@configuration.deployment_endpoint).freeze
+      @use_ssl        = @uri.scheme == 'https'
+      @deployment_use_ssl = @deployment_uri.scheme == 'https'
+      @auth_header    = "Bearer #{@configuration.api_key}".freeze
     end
 
     def publish(payload)
@@ -29,6 +31,12 @@ module Logister
 
       ensure_worker_started
       enqueue(payload)
+    end
+
+    def publish_deployment(payload)
+      return false unless ready?
+
+      publish_deployment_sync(payload)
     end
 
     def flush(timeout: 2)
@@ -112,6 +120,22 @@ module Logister
       end
     end
 
+    def publish_deployment_sync(payload)
+      attempts = 0
+      begin
+        attempts += 1
+        send_deployment_request(payload)
+      rescue StandardError => e
+        if attempts <= @configuration.max_retries
+          sleep(@configuration.retry_base_interval * (2**(attempts - 1)))
+          retry
+        end
+
+        @configuration.logger.warn("logister deployment publish failed: #{e.class} #{e.message}")
+        false
+      end
+    end
+
     def send_request(payload)
       request = Net::HTTP::Post.new(@uri)
       request['Content-Type']  = CONTENT_TYPE
@@ -122,6 +146,25 @@ module Logister
         @uri.host,
         @uri.port,
         use_ssl:      @use_ssl,
+        open_timeout: @configuration.timeout_seconds,
+        read_timeout: @configuration.timeout_seconds
+      ) { |http| http.request(request) }
+
+      return true if response.is_a?(Net::HTTPSuccess)
+
+      raise "HTTP #{response.code}"
+    end
+
+    def send_deployment_request(payload)
+      request = Net::HTTP::Post.new(@deployment_uri)
+      request['Content-Type']  = CONTENT_TYPE
+      request['Authorization'] = @auth_header
+      request.body             = { deployment: payload }.to_json
+
+      response = Net::HTTP.start(
+        @deployment_uri.host,
+        @deployment_uri.port,
+        use_ssl:      @deployment_use_ssl,
         open_timeout: @configuration.timeout_seconds,
         read_timeout: @configuration.timeout_seconds
       ) { |http| http.request(request) }

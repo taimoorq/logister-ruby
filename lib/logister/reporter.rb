@@ -18,8 +18,11 @@ module Logister
       @static_context = {
         environment: @configuration.environment,
         service:     @configuration.service,
-        release:     @configuration.release
-      }.freeze
+        release:     @configuration.release,
+        repository:  @configuration.repository,
+        commit_sha:  @configuration.commit_sha,
+        branch:      @configuration.branch
+      }.compact.freeze
 
       # Normalise ignore_environments once into a frozen Set of Strings so
       # ignored_environment? never allocates a mapped Array.
@@ -233,6 +236,40 @@ module Logister
       return false unless payload
 
       @client.publish(payload)
+    end
+
+    def record_deployment(
+      release: nil,
+      environment: nil,
+      repository: nil,
+      commit_sha: nil,
+      branch: nil,
+      deployed_at: nil,
+      pull_request_number: nil,
+      pull_request_url: nil,
+      release_tag: nil,
+      release_url: nil,
+      compare_url: nil,
+      workflow_run_url: nil,
+      deployment_url: nil
+    )
+      payload = {
+        release: release || @configuration.release,
+        environment: environment || @configuration.environment,
+        repository: repository || @configuration.repository,
+        commit_sha: commit_sha || @configuration.commit_sha,
+        branch: branch || @configuration.branch,
+        deployed_at: deployed_at && normalize_timestamp(deployed_at),
+        pull_request_number: pull_request_number,
+        pull_request_url: pull_request_url,
+        release_tag: release_tag,
+        release_url: release_url,
+        compare_url: compare_url,
+        workflow_run_url: workflow_run_url,
+        deployment_url: deployment_url
+      }.compact
+
+      @client.publish_deployment(payload)
     end
 
     # Store user info for the current thread so it is automatically attached to
