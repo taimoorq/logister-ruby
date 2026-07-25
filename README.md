@@ -1,11 +1,47 @@
 # logister-ruby
 
-`logister-ruby` is the Ruby and Rails client for sending errors, logs, metrics, transactions, spans, and check-ins to Logister.
+`logister-ruby` sends Ruby and Rails errors, logs, metrics, transactions, spans, and scheduled-job check-ins to Logister. Rails apps also get automatic reporting for unhandled requests and failed Active Job executions.
 
 Install it from RubyGems as `logister-ruby`.
 
+Requires Ruby 3.3 or newer and Active Support 8.x.
+
+## Quick start
+
+Before you start, create a project in Logister and generate a project API key under **Project settings → API keys**.
+
+Add the gem and generate a Rails initializer:
+
+```bash
+bundle add logister-ruby
+bin/rails generate logister:install
+```
+
+Store configuration in environment variables:
+
+```bash
+export LOGISTER_API_KEY="<project-api-key>"
+export LOGISTER_ENDPOINT="https://logister.example.com/api/v1/ingest_events"
+export LOGISTER_SERVICE="checkout-web"
+export LOGISTER_RELEASE="$(git rev-parse --short HEAD)"
+```
+
+Start Rails, then send a safe test event from `bin/rails console`:
+
+```ruby
+Logister.report_error(
+  RuntimeError.new("README test error"),
+  context: { component: "checkout" },
+  fingerprint: "readme-test-error"
+)
+Logister.flush
+```
+
+Open the project inbox and confirm that **README test error** appears. A `401` response usually means the API key or endpoint is wrong; see the [Ruby integration guide](https://logister.org/docs/integrations/ruby/) for troubleshooting.
+
 ## Table Of Contents
 
+- [Quick start](#quick-start)
 - [What this gem is for](#what-this-gem-is-for)
 - [Package Links](#package-links)
 - [Self-hosted backend](#self-hosted-backend)
@@ -18,17 +54,19 @@ Install it from RubyGems as `logister-ruby`.
 - [Breadcrumbs and dependencies](#breadcrumbs-and-dependencies)
 - [ActiveJob error context](#activejob-error-context)
 - [Manual reporting](#manual-reporting)
-- [Using project Insights beta](#using-project-insights-beta)
+- [Using project Insights](#using-project-insights)
+- [GitHub source context and deployments](#github-source-context-and-deployments)
 - [Documentation](#documentation)
+- [Development](#development)
 - [Release](#release)
 
 ## What this gem is for
 
-Use this gem when you want a Ruby or Rails app to send telemetry into the Logister backend.
+Use this gem when a Ruby process should send telemetry to a hosted or self-hosted Logister server. It is an ingest client, not the Logister server itself.
 
 - Main Logister app: https://github.com/taimoorq/logister
-- Ruby integration docs: https://docs.logister.org/integrations/ruby/
-- Product docs: https://docs.logister.org/
+- Ruby integration docs: https://logister.org/docs/integrations/ruby/
+- Product docs: https://logister.org/docs/
 - RubyGems package: https://rubygems.org/gems/logister-ruby
 
 ## Package Links
@@ -36,7 +74,7 @@ Use this gem when you want a Ruby or Rails app to send telemetry into the Logist
 - RubyGems package: https://rubygems.org/gems/logister-ruby
 - GitHub releases: https://github.com/taimoorq/logister-ruby/releases
 - Source repository: https://github.com/taimoorq/logister-ruby
-- Integration docs: https://docs.logister.org/integrations/ruby/
+- Integration docs: https://logister.org/docs/integrations/ruby/
 
 ## Self-hosted backend
 
@@ -100,6 +138,8 @@ end
 
 If you are using a self-hosted Logister install, point `config.endpoint` at your own Logister host instead of `logister.org`.
 
+Keep `LOGISTER_API_KEY` in your deployment secret store. Project API keys are write-only ingest credentials, but exposing one still lets another party submit unwanted telemetry to the project.
+
 ## Reliability options
 
 ```ruby
@@ -128,10 +168,9 @@ end
 
 ## Rails auto-reporting
 
-If Rails is present, the gem installs middleware that reports unhandled exceptions automatically.
-It also attaches richer context such as trace IDs, route/response/performance info, breadcrumbs, dependency calls, and user metadata when available.
-Set `config.capture_request_spans = true` to emit root `server` spans for request load waterfall charts while keeping existing transaction events.
-Manual `Logister.report_error` calls use the same shared enrichment path, so Ruby apps get runtime, deployment, breadcrumb, dependency, user, and nested exception cause context even when an error is reported outside the Rails middleware.
+If Rails is present, the gem installs middleware that reports unhandled exceptions automatically. It attaches trace IDs, route and response data, performance context, breadcrumbs, dependency calls, and user metadata when available.
+
+Set `config.capture_request_spans = true` to emit root `server` spans for request-load waterfall charts while keeping the existing transaction events. Manual `Logister.report_error` calls use the same enrichment path, including runtime, deployment, breadcrumb, dependency, user, and nested-exception context.
 
 ## Database load metrics (ActiveRecord)
 
@@ -225,7 +264,7 @@ Logister.report_check_in(
 )
 ```
 
-## Using project Insights beta
+## Using project Insights
 
 The Logister project Insights tab combines Inbox, Activity, and Performance signals into live dashboard views. Ruby apps get the most useful Insights experience when every event carries stable deployment context plus a few low-cardinality custom attributes.
 
@@ -322,28 +361,33 @@ Logister.record_deployment(
 
 ## Documentation
 
-- Ruby integration docs: https://docs.logister.org/integrations/ruby/
-- Insights beta guide: https://docs.logister.org/product/#insights-beta
-- Main Logister docs: https://docs.logister.org/
+- Ruby integration docs: https://logister.org/docs/integrations/ruby/
+- Insights guide: https://logister.org/docs/product/#insights
+- Main Logister docs: https://logister.org/docs/
 - [Contributing](CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Security Policy](SECURITY.md)
 - [Pull Request Template](.github/PULL_REQUEST_TEMPLATE.md)
 
-## Release
-
-This repo runs CI on commits and pull requests. After CI passes on `main`, the release-from-main workflow creates the matching version tag. Version tags run the release workflow so RubyGems and GitHub Releases stay aligned:
+## Development
 
 ```bash
-# 1) bump version in lib/logister/version.rb
-# 2) update CHANGELOG.md
-# 3) commit changes
-# 4) merge to main, or push a matching tag manually:
-git tag -a v0.2.8 -m "Release logister-ruby v0.2.8"
-git push origin main v0.2.8
+bundle install
+bundle-audit check --update
+bundle exec rake test
+bundle exec rake build
 ```
 
-The `.github/workflows/release.yml` workflow verifies the tag matches `Logister::VERSION`, runs tests, builds the gem, publishes to RubyGems with trusted publishing, and then creates or updates the matching GitHub release from `CHANGELOG.md`.
+## Release
+
+`lib/logister/version.rb` is the package version source of truth. Update it and `CHANGELOG.md` together. After CI passes on `main`, the release-from-main workflow creates a matching `vX.Y.Z` tag and dispatches the release workflow.
+
+```bash
+git tag -a vX.Y.Z -m "Release logister-ruby vX.Y.Z"
+git push origin vX.Y.Z
+```
+
+The release workflow verifies tag/version parity, audits and tests the package, builds the gem, publishes to RubyGems with trusted publishing, and only then creates the GitHub Release. RubyGems versions are immutable; corrections need a new patch version.
 
 Before tag releases can publish the gem, configure a RubyGems trusted publisher for:
 
@@ -352,8 +396,9 @@ Before tag releases can publish the gem, configure a RubyGems trusted publisher 
 - Workflow file: `.github/workflows/release.yml`
 - Environment: leave blank unless you also add a GitHub release environment to the workflow
 
-Manual publishing is still possible with Bundler's built-in release flow when needed:
+Verify both release surfaces before calling a release complete:
 
 ```bash
-bundle exec rake release
+curl -fsSL https://rubygems.org/api/v2/rubygems/logister-ruby/versions/X.Y.Z.json | jq '{number,ruby_version,sha}'
+gh release view vX.Y.Z
 ```
