@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.0 - 2026-07-25
+
+- Raised the supported runtime floor to Ruby 3.3 and refreshed the development runtime to Ruby 4.0.6, which includes current interpreter security fixes.
+- Raised the Rails integration floor to patched Rails 8 releases.
+- Added Ruby 3.3, 3.4, and 4.0 CI coverage plus a RubyGems advisory audit gate.
+- Pinned release actions to immutable commits and removed the duplicate release dispatch path.
+
 ## v0.2.8 - 2026-06-18
 
 - Added first-class source context configuration (`repository`, `commit_sha`, and `branch`) with `LOGISTER_*` and GitHub Actions environment variable support.

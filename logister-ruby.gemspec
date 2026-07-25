@@ -10,7 +10,7 @@ Gem::Specification.new do |spec|
   spec.description = 'Ruby and Rails client for reporting errors, logs, metrics, transactions, spans, and check-ins to the Logister backend, including self-hosted installs.'
   spec.homepage = 'https://github.com/taimoorq/logister-ruby'
   spec.license = 'MIT'
-  spec.required_ruby_version = '>= 3.1.0'
+  spec.required_ruby_version = '>= 3.3.0'
 
   spec.metadata['homepage_uri'] = spec.homepage
   spec.metadata['source_code_uri'] = 'https://github.com/taimoorq/logister-ruby'
@@ -24,7 +24,7 @@ Gem::Specification.new do |spec|
 
   spec.require_paths = ['lib']
 
-  spec.add_dependency 'activesupport', '>= 6.1'
-  spec.add_development_dependency 'actionpack', '>= 6.1'
+  spec.add_dependency 'activesupport', '>= 8.0.5', '< 9'
+  spec.add_development_dependency 'actionpack', '>= 8.0.5', '< 9'
   spec.add_development_dependency 'rake', '>= 13.0'
 end
