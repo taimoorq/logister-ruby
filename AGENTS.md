@@ -39,3 +39,17 @@ bundle exec rake build
 curl -fsSL https://rubygems.org/api/v2/rubygems/logister-ruby/versions/X.Y.Z.json | jq '{number,ruby_version,sha}'
 gh release view vX.Y.Z
 ```
+
+## Protected branch governance
+
+- Keep the independent-review requirement: pull requests into `main` need one
+  approval from a collaborator with write access.
+- GitHub aggregates classic branch protection and repository rulesets, using
+  the most restrictive effective rule. Audit both before changing merge policy.
+- Do not add a ruleset `update` restriction to `main`. That restriction allows
+  only bypass actors to update the ref and blocks an otherwise valid, approved
+  pull-request merge with `Cannot update this protected ref`.
+- Require code-owner review only when a `CODEOWNERS` file exists on the base
+  branch and every listed reviewer has write access.
+- Preserve deletion and non-fast-forward protection; do not weaken or bypass
+  review requirements to merge an agent-authored change.
