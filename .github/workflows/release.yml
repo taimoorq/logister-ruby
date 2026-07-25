@@ -10,18 +10,22 @@ permissions:
   contents: write
   id-token: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
         with:
           ruby-version: .ruby-version
           bundler-cache: true
@@ -37,6 +41,11 @@ jobs:
 
       - name: Run tests
         run: bundle exec rake test
+
+      - name: Audit dependencies
+        run: |
+          gem install bundler-audit --no-document
+          bundle-audit check --update
 
       - name: Build gem
         run: bundle exec rake build
@@ -60,7 +69,7 @@ jobs:
 
       - name: Publish gem with RubyGems trusted publishing
         if: steps.rubygems_package.outputs.exists != 'true'
-        uses: rubygems/release-gem@v1
+        uses: rubygems/release-gem@052cc82692552de3ef2b81fd670e41d13cba8092 # v1.4.0
 
       - name: Build release notes from changelog
         id: release_notes
