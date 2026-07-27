@@ -1,5 +1,6 @@
 require_relative 'logister/version'
 require_relative 'logister/configuration'
+require_relative 'logister/reporting_scope'
 require_relative 'logister/client'
 require_relative 'logister/reporter'
 require_relative 'logister/context_helpers'
@@ -21,6 +22,14 @@ module Logister
 
     def reporter
       @reporter ||= Reporter.new(configuration)
+    end
+
+    def suppress_reporting(&block)
+      ReportingScope.suppress(&block)
+    end
+
+    def reporting_suppressed?
+      ReportingScope.suppressed?
     end
 
     def report_error(exception, **kwargs)

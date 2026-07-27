@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.3.1 - 2026-07-26
+
+- Added `Logister.suppress_reporting` and `Logister.reporting_suppressed?` for recursion-safe telemetry processing, including early exits in automatic SQL and request subscribers.
+
 ## v0.3.0 - 2026-07-25
 
 - Raised the supported runtime floor to Ruby 3.3 and refreshed the development runtime to Ruby 4.0.6, which includes current interpreter security fixes.

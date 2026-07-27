@@ -22,6 +22,7 @@ module Logister
       private
 
       def handle_process_action(payload)
+        return if Logister.reporting_suppressed?
         return unless payload.is_a?(Hash)
 
         request_id = payload[:request_id].to_s.presence
@@ -89,6 +90,8 @@ module Logister
       end
 
       def handle_sql_breadcrumb(started, finished, payload)
+        return if Logister.reporting_suppressed?
+
         config = configuration
         return unless config&.capture_sql_breadcrumbs
         return unless payload.is_a?(Hash)

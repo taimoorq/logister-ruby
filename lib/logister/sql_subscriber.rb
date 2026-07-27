@@ -29,6 +29,8 @@ module Logister
       private
 
       def handle_sql_event(started, finished, payload)
+        return if Logister.reporting_suppressed?
+
         config = Logister.configuration
 
         # Short-circuit as cheaply as possible when metrics are disabled so

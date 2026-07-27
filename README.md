@@ -166,6 +166,16 @@ Logister.configure do |config|
 end
 ```
 
+Use scoped suppression around work that handles or forwards telemetry. Every manual reporter and automatic Rails subscriber returns without publishing while the scope is active, and nested scopes restore the previous state even when the block raises:
+
+```ruby
+Logister.suppress_reporting do
+  TelemetryMirror.call(event)
+end
+```
+
+This is especially important when a Rails application reports into a Logister project hosted by that same application. Keep suppression narrow so failures outside the telemetry-processing boundary remain observable.
+
 ## Rails auto-reporting
 
 If Rails is present, the gem installs middleware that reports unhandled exceptions automatically. It attaches trace IDs, route and response data, performance context, breadcrumbs, dependency calls, and user metadata when available.

@@ -44,6 +44,7 @@ module Logister
     end
 
     def report_error(exception, context: {}, tags: {}, level: 'error', fingerprint: nil)
+      return false if Logister.reporting_suppressed?
       return false if ignored_exception?(exception)
       return false if ignored_path?(context)
 
@@ -69,6 +70,7 @@ module Logister
     end
 
     def report_metric(message:, value: nil, unit: nil, level: 'info', context: {}, tags: {}, fingerprint: nil)
+      return false if Logister.reporting_suppressed?
       return false if ignored_environment?
       return false if ignored_path?(context)
 
@@ -100,6 +102,7 @@ module Logister
     end
 
     def report_transaction(name:, duration_ms:, level: 'info', context: {}, tags: {}, fingerprint: nil, status: nil)
+      return false if Logister.reporting_suppressed?
       return false if ignored_environment?
       return false if ignored_path?(context)
 
@@ -137,6 +140,7 @@ module Logister
       tags: {},
       fingerprint: nil
     )
+      return false if Logister.reporting_suppressed?
       return false if ignored_environment?
       return false if ignored_path?(context)
 
@@ -182,6 +186,7 @@ module Logister
     end
 
     def report_log(message:, level: 'info', context: {}, tags: {}, fingerprint: nil)
+      return false if Logister.reporting_suppressed?
       return false if ignored_environment?
       return false if ignored_path?(context)
 
@@ -212,6 +217,7 @@ module Logister
       trace_id: nil,
       request_id: nil
     )
+      return false if Logister.reporting_suppressed?
       return false if ignored_environment?
 
       payload = build_payload(
@@ -253,6 +259,8 @@ module Logister
       workflow_run_url: nil,
       deployment_url: nil
     )
+      return false if Logister.reporting_suppressed?
+
       payload = {
         release: release || @configuration.release,
         environment: environment || @configuration.environment,
