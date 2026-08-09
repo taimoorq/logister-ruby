@@ -17,6 +17,15 @@ class Minitest::Test
       config.release = "test-release"
       config.enabled = true
       config.async = false
+      config.timeout_seconds = 2
+      config.queue_size = 1000
+      config.batch_size = 50
+      config.batch_interval = 0.05
+      config.batch_compression = true
+      config.max_retries = 3
+      config.retry_base_interval = 0.5
+      config.max_retry_delay = 30.0
+      config.retry_jitter = 0.2
       config.logger = Logger.new(StringIO.new)
       config.ignore_exceptions = []
       config.ignore_environments = []

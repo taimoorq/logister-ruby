@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.4.0 - 2026-08-08
+
+- Added stable UUID assignment before synchronous or asynchronous delivery so retries preserve one logical event identity.
+- Added configurable gzip/NDJSON batching for the Logister batch-ingest endpoint, including deterministic batch IDs, bounded batch size and interval, and automatic fallback to stable single-event delivery for older servers.
+- Added recursive `413` batch splitting while continuing every split or fallback attempt, preventing one failed subset from short-circuiting the remainder.
+- Added transient-only retries with connect, read, and write timeouts, numeric or HTTP-date `Retry-After` support, capped exponential backoff, and bounded jitter.
+- Added batch and retry settings to the Rails generator and Railtie configuration bridge, and made `Logister.flush` wait for in-flight batch delivery rather than only an empty queue.
+
 ## v0.3.1 - 2026-07-26
 
 - Added `Logister.suppress_reporting` and `Logister.reporting_suppressed?` for recursion-safe telemetry processing, including early exits in automatic SQL and request subscribers.
