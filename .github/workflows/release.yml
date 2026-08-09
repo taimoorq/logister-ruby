@@ -24,6 +24,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Check public repository safety
+        run: bash scripts/publication-safety-check.sh
+
       - name: Set up Ruby
         uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
         with:
@@ -39,6 +42,20 @@ jobs:
           abort("Tag #{actual_tag} does not match gem version #{expected_tag}.") unless actual_tag == expected_tag
           RUBY
 
+      - name: Prepare release notes
+        run: |
+          title="$(awk -v tag="$GITHUB_REF_NAME" '
+            $0 ~ "^## " tag "([[:space:]]|-|$)" { sub(/^## /, ""); print; exit }
+          ' CHANGELOG.md)"
+          test -n "$title"
+          awk -v tag="$GITHUB_REF_NAME" '
+            $0 ~ "^## " tag "([[:space:]]|-|$)" { capture=1; next }
+            capture && /^## / { exit }
+            capture { print }
+          ' CHANGELOG.md > release-notes.md
+          test -s release-notes.md
+          echo "RELEASE_TITLE=$title" >> "$GITHUB_ENV"
+
       - name: Run tests
         run: bundle exec rake test
 
@@ -50,6 +67,16 @@ jobs:
       - name: Build gem
         run: bundle exec rake build
 
+      - name: Inspect gem file list
+        run: |
+          gem_file="pkg/logister-ruby-${GITHUB_REF_NAME#v}.gem"
+          test -f "$gem_file"
+          files="$(gem specification "$gem_file" files --yaml)"
+          if echo "$files" | grep -Eq '(^|/)(\.env|tmp/release-|[^/]+\.(key|pem|p12|pfx))$|^/|\.\./'; then
+            echo "::error::Gem contains a publication-unsafe path."
+            exit 1
+          fi
+
       - name: Check RubyGems package version
         id: rubygems_package
         run: |
@@ -60,7 +87,8 @@ jobs:
           version = ENV.fetch("GITHUB_REF_NAME").delete_prefix("v")
           uri = URI("https://rubygems.org/api/v1/versions/logister-ruby.json")
           response = Net::HTTP.get_response(uri)
-          versions = response.is_a?(Net::HTTPSuccess) ? JSON.parse(response.body) : []
+          abort("RubyGems lookup failed with HTTP #{response.code}.") unless response.is_a?(Net::HTTPSuccess)
+          versions = JSON.parse(response.body)
           exists = versions.any? { |entry| entry.fetch("number") == version }
 
           puts "exists=#{exists ? "true" : "false"}"
@@ -71,41 +99,20 @@ jobs:
         if: steps.rubygems_package.outputs.exists != 'true'
         uses: rubygems/release-gem@052cc82692552de3ef2b81fd670e41d13cba8092 # v1.4.0
 
-      - name: Build release notes from changelog
-        id: release_notes
+      - name: Verify RubyGems publication
         run: |
-          ruby <<'RUBY' > "$GITHUB_OUTPUT"
-          changelog_path = "CHANGELOG.md"
-          tag = ENV.fetch("GITHUB_REF_NAME")
-
-          abort("Missing #{changelog_path}") unless File.exist?(changelog_path)
-
-          current_header = nil
-          body_lines = []
-          found = false
-
-          File.readlines(changelog_path, chomp: true).each do |line|
-            if line.start_with?("## ")
-              break if found
-
-              current_header = line.sub(/\A##\s+/, "")
-              found = current_header.start_with?(tag)
-              next
-            end
-
-            body_lines << line if found
-          end
-
-          abort("Could not find release notes for #{tag} in #{changelog_path}") unless found
-
-          body = body_lines.join("\n").strip
-          body = "Release #{tag}" if body.empty?
-
-          puts "name=#{current_header}"
-          puts "body<<EOF"
-          puts body
-          puts "EOF"
-          RUBY
+          version="${GITHUB_REF_NAME#v}"
+          for attempt in $(seq 1 30); do
+            if gem dependency logister-ruby --remote --version "$version" 2>/dev/null | grep -q "logister-ruby (${version})"; then
+              verify_dir="$(mktemp -d)"
+              (cd "$verify_dir" && gem fetch logister-ruby --version "$version" --clear-sources --source https://rubygems.org >/dev/null)
+              cmp "pkg/logister-ruby-${version}.gem" "$verify_dir/logister-ruby-${version}.gem"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::RubyGems did not expose the release within the verification window."
+          exit 1
 
       - name: Create or update GitHub release
         env:
@@ -113,12 +120,12 @@ jobs:
         run: |
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release edit "$GITHUB_REF_NAME" \
-              --title "${{ steps.release_notes.outputs.name }}" \
-              --notes "${{ steps.release_notes.outputs.body }}" \
+              --title "$RELEASE_TITLE" \
+              --notes-file release-notes.md \
               --latest
           else
             gh release create "$GITHUB_REF_NAME" \
-              --title "${{ steps.release_notes.outputs.name }}" \
-              --notes "${{ steps.release_notes.outputs.body }}" \
+              --title "$RELEASE_TITLE" \
+              --notes-file release-notes.md \
               --latest
           fi
