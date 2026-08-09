@@ -6,11 +6,12 @@ module Logister
                   :repository, :commit_sha, :branch, :enabled, :timeout_seconds, :logger,
                   :ignore_exceptions, :ignore_environments, :ignore_paths, :before_notify,
                   :async, :queue_size, :max_retries, :retry_base_interval,
+                  :max_retry_delay, :retry_jitter, :batch_size, :batch_interval, :batch_compression,
                   :capture_db_metrics, :db_metric_min_duration_ms, :db_metric_sample_rate,
                   :feature_flags_resolver, :dependency_resolver, :anonymize_ip,
                   :max_breadcrumbs, :max_dependencies, :capture_request_spans,
                   :capture_sql_breadcrumbs, :sql_breadcrumb_min_duration_ms
-    attr_writer :deployment_endpoint
+    attr_writer :deployment_endpoint, :batch_endpoint
 
     def initialize
       @api_key = ENV['LOGISTER_API_KEY']
@@ -36,6 +37,11 @@ module Logister
       @queue_size = 1000
       @max_retries = 3
       @retry_base_interval = 0.5
+      @max_retry_delay = 30.0
+      @retry_jitter = 0.2
+      @batch_size = 50
+      @batch_interval = 0.05
+      @batch_compression = true
 
       @capture_db_metrics = false
       @db_metric_min_duration_ms = 0.0
@@ -53,6 +59,10 @@ module Logister
 
     def deployment_endpoint
       @deployment_endpoint || endpoint.to_s.sub(%r{/ingest_events\z}, '/deployments')
+    end
+
+    def batch_endpoint
+      @batch_endpoint || endpoint.to_s.sub(%r{/ingest_events\z}, '/ingest_events/batch')
     end
 
     private

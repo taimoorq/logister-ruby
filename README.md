@@ -146,10 +146,25 @@ Keep `LOGISTER_API_KEY` in your deployment secret store. Project API keys are wr
 Logister.configure do |config|
   config.async = true
   config.queue_size = 1000
+  config.batch_size = 50
+  config.batch_interval = 0.05
+  config.batch_compression = true
   config.max_retries = 3
   config.retry_base_interval = 0.5
+  config.max_retry_delay = 30.0
+  config.retry_jitter = 0.2
 end
 ```
+
+Asynchronous delivery assigns a UUID before enqueueing, combines queued events into
+gzip/NDJSON batches, and retries the same identifiers. This makes a whole-batch retry
+safe against a Logister server that supports the batch endpoint. Older servers are
+detected automatically and receive the same stable events through the single-event
+endpoint. Call `Logister.flush` before a short-lived process exits.
+
+Every HTTP attempt applies `timeout_seconds` to connect, read, and write operations.
+Retryable responses honor `Retry-After` when present, cap any individual wait at
+`max_retry_delay`, and add bounded positive jitter controlled by `retry_jitter`.
 
 ## Filtering and redaction
 
