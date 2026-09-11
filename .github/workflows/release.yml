@@ -113,14 +113,26 @@ jobs:
 
       - name: Verify RubyGems publication
         run: |
+          set -euo pipefail
           version="${RELEASE_TAG#v}"
+          verify_dir="$(mktemp -d)"
+          trap 'rm -rf "$verify_dir"' EXIT
           for attempt in $(seq 1 30); do
-            if gem dependency logister-ruby --remote --version "$version" 2>/dev/null | grep -q "logister-ruby (${version})"; then
-              verify_dir="$(mktemp -d)"
-              (cd "$verify_dir" && gem fetch logister-ruby --version "$version" --clear-sources --source https://rubygems.org >/dev/null)
-              cmp "pkg/logister-ruby-${version}.gem" "$verify_dir/logister-ruby-${version}.gem"
-              exit 0
-            fi
+            status="$(curl --silent --show-error --max-time 30 --output "$verify_dir/metadata.json" --write-out '%{http_code}' "https://rubygems.org/api/v2/rubygems/logister-ruby/versions/${version}.json")"
+            case "$status" in
+              200)
+                ruby -rjson -rdigest -e '
+                  metadata = JSON.parse(File.read(ARGV.fetch(0)))
+                  abort "RubyGems package identity mismatch" unless metadata.fetch("name") == "logister-ruby" && metadata.fetch("number") == ARGV.fetch(1)
+                  abort "RubyGems artifact checksum mismatch" unless metadata.fetch("sha") == Digest::SHA256.file(ARGV.fetch(2)).hexdigest
+                ' "$verify_dir/metadata.json" "$version" "pkg/logister-ruby-${version}.gem"
+                curl --fail --silent --show-error --location --max-time 30 "https://rubygems.org/downloads/logister-ruby-${version}.gem" --output "$verify_dir/published.gem"
+                cmp "pkg/logister-ruby-${version}.gem" "$verify_dir/published.gem"
+                exit 0
+                ;;
+              404) ;;
+              *) echo "::error::RubyGems verification lookup failed with HTTP $status."; exit 1 ;;
+            esac
             sleep 10
           done
           echo "::error::RubyGems did not expose the release within the verification window."
