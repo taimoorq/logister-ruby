@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.1 - 2026-09-11
+
+- Constrained JSON to the compatible 2.x line while supported ActiveSupport 8 releases use positional JSON.parse options; verified real Rails request decoding.
+- Restored explicit publication dispatch and immutable-tag recovery after successful current-main CI. Weekly dependency checks cannot publish releases.
+
 ## v0.4.0 - 2026-08-08
 
 - Added stable UUID assignment before synchronous or asynchronous delivery so retries preserve one logical event identity.
