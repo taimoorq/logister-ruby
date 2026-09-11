@@ -15,3 +15,5 @@
 __MACOSX/
 */.DS_Store
 */__MACOSX/
+
+__pycache__/

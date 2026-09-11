@@ -427,3 +427,22 @@ Verify both release surfaces before calling a release complete:
 curl -fsSL https://rubygems.org/api/v2/rubygems/logister-ruby/versions/X.Y.Z.json | jq '{number,ruby_version,sha}'
 gh release view vX.Y.Z
 ```
+
+
+### Coordinated release preparation
+
+For a coordinated ecosystem release, keep the version-changing PR unmerged until
+the final agreed Rails PR has been published and its deployment verified. Recheck
+the upstream contract/workflow pin against that final backend commit before merge.
+Successful source CI, a tag, or a release-impact dispatch alone is not backend readiness.
+After independent review, merging the new version runs CI, creates an immutable tag,
+and explicitly dispatches publication. A tag without a package remains incomplete.
+
+To recover an existing reviewed tag, dispatch the publisher workflow from `main`
+with `-f tag=vX.Y.Z` (Python uses `publish.yml`; other SDKs use `release.yml`). The
+workflow checks out that exact tag, proves it belongs to main, and verifies public
+package identity before creating the GitHub Release. Never move a consumed tag.
+
+Weekly CI audits/tests current dependencies and cannot trigger automatic publication.
+Dependabot groups compatible minor/patch updates; major toolchain migrations keep
+separate PRs. Pin Actions to full commits and retain supported runtime floors.

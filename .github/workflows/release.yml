@@ -5,14 +5,21 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing immutable vX.Y.Z tag to publish or recover
+        required: true
 
 permissions:
   contents: write
   id-token: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   release:
@@ -22,7 +29,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
           persist-credentials: false
+
+      - name: Verify immutable tag belongs to reviewed main
+        run: bash scripts/verify-release-ref.sh
 
       - name: Check public repository safety
         run: bash scripts/publication-safety-check.sh
@@ -37,18 +49,18 @@ jobs:
         run: |
           ruby -Ilib -rlogister/version <<'RUBY'
           expected_tag = "v#{Logister::VERSION}"
-          actual_tag = ENV.fetch("GITHUB_REF_NAME")
+          actual_tag = ENV.fetch("RELEASE_TAG")
 
           abort("Tag #{actual_tag} does not match gem version #{expected_tag}.") unless actual_tag == expected_tag
           RUBY
 
       - name: Prepare release notes
         run: |
-          title="$(awk -v tag="$GITHUB_REF_NAME" '
+          title="$(awk -v tag="$RELEASE_TAG" '
             $0 ~ "^## " tag "([[:space:]]|-|$)" { sub(/^## /, ""); print; exit }
           ' CHANGELOG.md)"
           test -n "$title"
-          awk -v tag="$GITHUB_REF_NAME" '
+          awk -v tag="$RELEASE_TAG" '
             $0 ~ "^## " tag "([[:space:]]|-|$)" { capture=1; next }
             capture && /^## / { exit }
             capture { print }
@@ -69,7 +81,7 @@ jobs:
 
       - name: Inspect gem file list
         run: |
-          gem_file="pkg/logister-ruby-${GITHUB_REF_NAME#v}.gem"
+          gem_file="pkg/logister-ruby-${RELEASE_TAG#v}.gem"
           test -f "$gem_file"
           files="$(gem specification "$gem_file" files --yaml)"
           if echo "$files" | grep -Eq '(^|/)(\.env|tmp/release-|[^/]+\.(key|pem|p12|pfx))$|^/|\.\./'; then
@@ -84,7 +96,7 @@ jobs:
           require "json"
           require "net/http"
 
-          version = ENV.fetch("GITHUB_REF_NAME").delete_prefix("v")
+          version = ENV.fetch("RELEASE_TAG").delete_prefix("v")
           uri = URI("https://rubygems.org/api/v1/versions/logister-ruby.json")
           response = Net::HTTP.get_response(uri)
           abort("RubyGems lookup failed with HTTP #{response.code}.") unless response.is_a?(Net::HTTPSuccess)
@@ -97,11 +109,11 @@ jobs:
 
       - name: Publish gem with RubyGems trusted publishing
         if: steps.rubygems_package.outputs.exists != 'true'
-        uses: rubygems/release-gem@052cc82692552de3ef2b81fd670e41d13cba8092 # v1.4.0
+        uses: rubygems/release-gem@7f9650160c1a4e7989fdc9855807bdbd421d8b6b # v1.4.1
 
       - name: Verify RubyGems publication
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${RELEASE_TAG#v}"
           for attempt in $(seq 1 30); do
             if gem dependency logister-ruby --remote --version "$version" 2>/dev/null | grep -q "logister-ruby (${version})"; then
               verify_dir="$(mktemp -d)"
@@ -118,13 +130,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release edit "$GITHUB_REF_NAME" \
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" \
               --title "$RELEASE_TITLE" \
               --notes-file release-notes.md \
               --latest
           else
-            gh release create "$GITHUB_REF_NAME" \
+            gh release create "$RELEASE_TAG" \
               --title "$RELEASE_TITLE" \
               --notes-file release-notes.md \
               --latest
