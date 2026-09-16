@@ -298,6 +298,10 @@ module Logister
       @client.flush(timeout: timeout)
     end
 
+    def delivery_stats
+      @client.delivery_stats
+    end
+
     def shutdown
       @client.shutdown
     end

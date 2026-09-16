@@ -162,6 +162,24 @@ safe against a Logister server that supports the batch endpoint. Older servers a
 detected automatically and receive the same stable events through the single-event
 endpoint. Call `Logister.flush` before a short-lived process exits.
 
+### Delivery outcomes
+
+`flush` waits for queued and in-flight attempts to finish; it does not guarantee
+server acknowledgement. Inspect `Logister.delivery_stats` for process-local
+`queued_events`, `acknowledged_events`, `unconfirmed_events`, `queue_full_events`,
+`retry_attempts`, and `pending_events`. An unconfirmed event may already have
+reached the server when its response timed out. Counts are not durable and reset
+with the client/process; they cover events, not deployment reports.
+
+For local delivery diagnostics, set `config.delivery_observer` to a fast callback
+accepting `{ outcome:, count:, reason: }`. It receives no payload, identifiers,
+credentials, or exception messages. Reporting is suppressed inside the callback
+to prevent feedback loops; callback failure cannot change delivery. Write these
+diagnostics to a local log or counter rather than publishing them through Logister.
+`shutdown` waits at most one second for the worker and returns false if attempts
+are still running. It stops accepting asynchronous events and does not kill an
+in-flight request or block while adding a sentinel to a full queue.
+
 Every HTTP attempt applies `timeout_seconds` to connect, read, and write operations.
 Retryable responses honor `Retry-After` when present, cap any individual wait at
 `max_retry_delay`, and add bounded positive jitter controlled by `retry_jitter`.

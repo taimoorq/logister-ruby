@@ -32,9 +32,13 @@ module Logister
       @queue         = SizedQueue.new(@configuration.queue_size)
       @worker        = nil
       @running       = false
+      @stopping      = false
       @pending_mutex = Mutex.new
       @pending_condition = ConditionVariable.new
       @pending_count = 0
+      @delivery_mutex = Mutex.new
+      @delivery_counts = { queued_events: 0, acknowledged_events: 0, unconfirmed_events: 0,
+                           queue_full_events: 0, retry_attempts: 0 }
 
       # Cache values that are static for the lifetime of this client so we
       # don't allocate on every send_request call.
@@ -48,6 +52,7 @@ module Logister
     end
 
     def publish(payload)
+      return false if ReportingScope.suppressed?
       return false unless ready?
 
       payload = with_stable_uuid(payload)
@@ -83,25 +88,40 @@ module Logister
     def shutdown
       return true unless @configuration.async
 
-      @running = false
-      begin
-        @queue.push(nil)
-      rescue StandardError
-        nil
+      worker = @worker_mutex.synchronize do
+        @stopping = true
+        begin
+          @queue.push(nil, true)
+        rescue ThreadError
+          # A full queue will be drained by the worker, which also checks the
+          # stopping flag. Never block the caller waiting to enqueue a sentinel.
+        end
+        @worker
       end
-      @worker&.join(1)
-      @worker = nil
-      true
+      worker&.join(1)
+      !worker&.alive?
+    end
+
+    # Process-local counters, never an assertion of exactly-once server receipt.
+    def delivery_stats
+      @delivery_mutex.synchronize { @delivery_counts.dup }
+        .merge(pending_events: @pending_mutex.synchronize { @pending_count })
     end
 
     private
 
     def enqueue(payload)
-      increment_pending
-      @queue.push(payload, true)
+      @worker_mutex.synchronize do
+        return false if @stopping
+
+        increment_pending
+        @queue.push(payload, true)
+      end
+      record_delivery(:queued_events, 1)
       true
     rescue ThreadError
       complete_pending(1)
+      record_delivery(:queue_full_events, 1, reason: 'queue_full')
       @configuration.logger.warn('logister queue full; dropping event')
       false
     end
@@ -111,6 +131,7 @@ module Logister
       return if @running && @worker&.alive?
 
       @worker_mutex.synchronize do
+        return if @stopping
         return if @running && @worker&.alive?
 
         @running = true
@@ -144,7 +165,7 @@ module Logister
 
         publish_batch_sync(batch)
         complete_pending(batch.length)
-        break if stop_after_batch
+        break if stop_after_batch || (@stopping && @queue.empty?)
       end
     rescue StandardError => e
       @configuration.logger.warn("logister worker crashed: #{e.class} #{e.message}")
@@ -158,14 +179,22 @@ module Logister
       attempts = 0
       begin
         attempts += 1
-        send_request(payload)
+        delivered = send_request(payload)
+        unless delivered
+          record_delivery(:unconfirmed_events, 1, reason: 'no_acknowledgment')
+          return false
+        end
+        record_delivery(:acknowledged_events, 1)
+        true
       rescue StandardError => e
         if attempts <= @configuration.max_retries && retryable_error?(e)
+          record_delivery(:retry_attempts, 1, reason: failure_reason(e))
           sleep(retry_delay(e, attempts))
           retry
         end
 
-        @configuration.logger.warn("logister publish failed: #{e.class} #{e.message}")
+        record_delivery(:unconfirmed_events, 1, reason: failure_reason(e))
+        @configuration.logger.warn("logister publish failed: #{e.class}")
         false
       end
     end
@@ -174,7 +203,13 @@ module Logister
       attempts = 0
       begin
         attempts += 1
-        send_batch_request(payloads)
+        delivered = send_batch_request(payloads)
+        unless delivered
+          record_delivery(:unconfirmed_events, payloads.length, reason: 'no_acknowledgment')
+          return false
+        end
+        record_delivery(:acknowledged_events, payloads.length)
+        true
       rescue UnsupportedBatchEndpoint
         payloads.map { |payload| publish_sync(payload) }.all?
       rescue RequestError => e
@@ -185,19 +220,23 @@ module Logister
           return first_half_delivered && second_half_delivered
         end
         if attempts <= @configuration.max_retries && retryable_error?(e)
+          record_delivery(:retry_attempts, 1, reason: failure_reason(e))
           sleep(retry_delay(e, attempts))
           retry
         end
 
-        @configuration.logger.warn("logister batch publish failed: #{e.class} #{e.message}")
+        record_delivery(:unconfirmed_events, payloads.length, reason: failure_reason(e))
+        @configuration.logger.warn("logister batch publish failed: #{e.class}")
         false
       rescue StandardError => e
         if attempts <= @configuration.max_retries && retryable_error?(e)
+          record_delivery(:retry_attempts, 1, reason: failure_reason(e))
           sleep(retry_delay(e, attempts))
           retry
         end
 
-        @configuration.logger.warn("logister batch publish failed: #{e.class} #{e.message}")
+        record_delivery(:unconfirmed_events, payloads.length, reason: failure_reason(e))
+        @configuration.logger.warn("logister batch publish failed: #{e.class}")
         false
       end
     end
@@ -288,6 +327,26 @@ module Logister
 
     def monotonic_now
       Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    end
+
+    def failure_reason(error)
+      return "http_#{error.status}" if error.is_a?(RequestError)
+      return 'timeout' if error.is_a?(Timeout::Error)
+
+      'transport_error'
+    end
+
+    def record_delivery(counter, count, reason: nil)
+      @delivery_mutex.synchronize { @delivery_counts[counter] += count }
+      observer = @configuration.delivery_observer
+      return unless observer
+
+      ReportingScope.suppress do
+        observer.call({ outcome: counter.to_s, count: count, reason: reason }.compact.freeze)
+      end
+    rescue StandardError
+      # Counters survive observer failure; never report this through telemetry.
+      nil
     end
 
     def with_stable_uuid(payload)

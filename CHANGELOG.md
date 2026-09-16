@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.4.2 - 2026-09-16
+
+- Added process-local delivery counters and an optional recursion-safe observer for queued, acknowledged, unconfirmed, queue-full, and retry outcomes without exporting event contents.
+- Clarified that a drained queue or successful `flush` does not prove every event was acknowledged; timed-out requests may already have reached the server.
+- Removed exception messages from terminal event-publish warnings to avoid exposing transport details.
+- Bounded async shutdown even when the queue is full; retained the worker until it finishes and report incomplete shutdown honestly.
+
 ## v0.4.1 - 2026-09-11
 
 - Constrained JSON to the compatible 2.x line while supported ActiveSupport 8 releases use positional JSON.parse options; verified real Rails request decoding.
