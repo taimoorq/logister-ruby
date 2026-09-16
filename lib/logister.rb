@@ -64,6 +64,10 @@ module Logister
       reporter.flush(timeout: timeout)
     end
 
+    def delivery_stats
+      reporter.delivery_stats
+    end
+
     def shutdown
       reporter.shutdown
     end

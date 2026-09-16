@@ -31,6 +31,7 @@ class Minitest::Test
       config.ignore_environments = []
       config.ignore_paths = []
       config.before_notify = nil
+      config.delivery_observer = nil
       config.capture_db_metrics = false
       config.feature_flags_resolver = nil
       config.dependency_resolver = nil

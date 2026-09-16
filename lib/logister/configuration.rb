@@ -10,7 +10,7 @@ module Logister
                   :capture_db_metrics, :db_metric_min_duration_ms, :db_metric_sample_rate,
                   :feature_flags_resolver, :dependency_resolver, :anonymize_ip,
                   :max_breadcrumbs, :max_dependencies, :capture_request_spans,
-                  :capture_sql_breadcrumbs, :sql_breadcrumb_min_duration_ms
+                  :capture_sql_breadcrumbs, :sql_breadcrumb_min_duration_ms, :delivery_observer
     attr_writer :deployment_endpoint, :batch_endpoint
 
     def initialize
@@ -32,6 +32,7 @@ module Logister
       @ignore_environments = []
       @ignore_paths = []
       @before_notify = nil
+      @delivery_observer = nil
 
       @async = true
       @queue_size = 1000
