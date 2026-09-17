@@ -26,7 +26,7 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency 'activesupport', '>= 8.0.5', '< 9'
   # ActiveSupport 8 passes JSON.parse options positionally; JSON 3 removed that API.
-  spec.add_dependency 'json', '>= 2', '< 3'
+  spec.add_dependency 'json', '>= 2', '< 4'
   spec.add_development_dependency 'actionpack', '>= 8.0.5', '< 9'
   spec.add_development_dependency 'rake', '>= 13.0'
 end
