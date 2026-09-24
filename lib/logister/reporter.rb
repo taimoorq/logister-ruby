@@ -146,7 +146,10 @@ module Logister
 
       started_at ||= Time.now.utc - (duration_ms.to_f / 1000.0)
       span_id ||= SecureRandom.hex(8)
-      trace_id ||= span_id
+      active = Logister::ContextStore.trace_context
+      trace_id ||= active&.trace_id || SecureRandom.hex(16)
+      request_id ||= active&.request_id
+      parent_span_id ||= active&.span_id unless span_id == active&.span_id
 
       payload = build_payload(
         event_type: 'span',
@@ -357,7 +360,7 @@ module Logister
         # Merge static config context last so caller-supplied keys are not
         # overwritten, then merge the static values. The static_context Hash
         # is frozen and reused — only the new outer Hash is allocated.
-        context:     @static_context.merge(context)
+        context:     @static_context.merge(Logister::ContextStore.trace_context&.to_h || {}).merge(context)
       }
     end
 

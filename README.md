@@ -464,3 +464,37 @@ package identity before creating the GitHub Release. Never move a consumed tag.
 Weekly CI audits/tests current dependencies and cannot trigger automatic publication.
 Dependabot groups compatible minor/patch updates; major toolchain migrations keep
 separate PRs. Pin Actions to full commits and retain supported runtime floors.
+
+## Request correlation (0.5.0+)
+
+The Rack/Rails integration accepts strict W3C version 00 `traceparent` headers,
+creates a local server span, and applies its identity to automatic and manual
+telemetry during the request. It preserves the incoming trace flags. Each request
+has its own scope, cleared even when the request raises.
+
+For an outbound call, retain a child handle and apply headers only to the intended
+origin. Disable automatic redirects, or regenerate and validate headers for every
+hop. Keep telemetry and token-issuer calls outside this instrumentation.
+
+```ruby
+trace = Logister.outbound_trace_context
+headers = trace.headers_for("https://api.example.test/orders", allowed_origins: ["https://api.example.test"])
+# Pass headers to your HTTP client with automatic redirects disabled.
+# When that request fails:
+Logister.report_error(StandardError.new("Order request failed"), context: trace.to_h)
+```
+
+`Logister.current_trace_context` returns the immutable active request handle.
+Background jobs require explicitly supplied context; there is no automatic queue
+propagation in this release.
+
+A linked-project lookup also requires Logister 3.7+, the instance flag
+`LOGISTER_CROSS_PROJECT_CORRELATIONS=true`, and explicit project/environment
+connections under Settings → Integrations → Connected projects. Enable related
+requests on both projects. A connection never grants project access.
+
+Use the returned request handle when reporting a handled HTTP failure later.
+Do not attach the most recent request to an unrelated crash or OS diagnostic.
+Configure each app's own `release` and `environment`; mobile and backend releases
+are independent. The backend shows exact identifier evidence and retention gaps.
+See the [request correlation guide](https://logister.org/docs/request-correlation/).

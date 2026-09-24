@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.0 - 2026-09-24
+
+- Propagate W3C request context through Rack and Rails, including logs, errors, transactions, and server spans.
+- Add immutable request handles and exact-origin outbound header helpers; preserve incoming trace flags and isolate concurrent request scopes.
+
 ## v0.4.2 - 2026-09-16
 
 - Added process-local delivery counters and an optional recursion-safe observer for queued, acknowledged, unconfirmed, queue-full, and retry outcomes without exporting event contents.

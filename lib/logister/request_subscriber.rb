@@ -8,8 +8,8 @@ module Logister
       def install!
         return if @installed
 
-        ActiveSupport::Notifications.subscribe("process_action.action_controller") do |_name, _started, _finished, _id, payload|
-          handle_process_action(payload)
+        ActiveSupport::Notifications.subscribe("process_action.action_controller") do |_name, started, finished, _id, payload|
+          handle_process_action(payload.merge(duration: (finished - started) * 1000.0, started_at: started))
         end
 
         ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, started, finished, _id, payload|
@@ -25,7 +25,7 @@ module Logister
         return if Logister.reporting_suppressed?
         return unless payload.is_a?(Hash)
 
-        request_id = payload[:request_id].to_s.presence
+        request_id = Logister::ContextStore.trace_context&.request_id || payload[:request_id].to_s.presence || payload[:request]&.request_id
         return unless request_id
 
         Logister::ContextStore.store_request_summary(
@@ -65,13 +65,16 @@ module Logister
         return unless duration_ms&.positive?
 
         route = "#{payload[:controller]}##{payload[:action]}"
-        started_at = Time.now.utc - (duration_ms / 1000.0)
+        started_at = payload[:started_at] || Time.now.utc - (duration_ms / 1000.0)
+        trace = Logister::ContextStore.trace_context || Logister::TraceContext.from_headers(request_id: request_id)
 
         Logister.report_span(
           name: route,
           kind: "server",
           status: payload[:status].to_i >= 500 ? "error" : "ok",
-          trace_id: request_id,
+          trace_id: trace.trace_id,
+          span_id: trace.span_id,
+          parent_span_id: trace.parent_span_id,
           request_id: request_id,
           duration_ms: duration_ms,
           started_at: started_at,

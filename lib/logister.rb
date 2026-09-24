@@ -5,12 +5,23 @@ require_relative 'logister/client'
 require_relative 'logister/reporter'
 require_relative 'logister/context_helpers'
 require_relative 'logister/context_store'
+require_relative 'logister/trace_context'
 require_relative 'logister/middleware'
 require_relative 'logister/sql_subscriber'
 require_relative 'logister/request_subscriber'
 
 module Logister
   class << self
+    def current_trace_context
+      ContextStore.trace_context
+    end
+
+    # The returned child is the handle for this outbound attempt. Supply its
+    # to_h as context when reporting an error after the request scope has ended.
+    def outbound_trace_context
+      (current_trace_context || TraceContext.new).child
+    end
+
     def configuration
       @configuration ||= Configuration.new
     end
