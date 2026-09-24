@@ -12,8 +12,14 @@ module Logister
 
     def call(env)
       Logister::ContextStore.reset_request_scope!
+      Logister::ContextStore.trace_context = Logister::TraceContext.from_headers(
+        traceparent: env["HTTP_TRACEPARENT"], request_id: env["action_dispatch.request_id"] || env["HTTP_X_REQUEST_ID"]
+      )
+      env["logister.trace_context"] = Logister::ContextStore.trace_context
       started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      @app.call(env)
+      status, headers, body = @app.call(env)
+      headers = headers.merge("x-request-id" => Logister::ContextStore.trace_context.request_id)
+      [status, headers, body]
     rescue StandardError => e
       request = ActionDispatch::Request.new(env)
       request_context = build_request_context(request, env, error: e, started_at: started_at)

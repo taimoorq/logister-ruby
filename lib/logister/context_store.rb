@@ -25,6 +25,14 @@ module Logister
       trim_collection!(breadcrumbs, max_breadcrumbs)
     end
 
+    def trace_context
+      request_scope[:trace_context]
+    end
+
+    def trace_context=(value)
+      request_scope[:trace_context] = value
+    end
+
     def breadcrumbs
       request_scope[:breadcrumbs].dup
     end

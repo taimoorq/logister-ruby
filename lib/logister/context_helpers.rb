@@ -12,7 +12,7 @@ module Logister
       {
         runtime: {
           rubyVersion: RUBY_VERSION,
-          railsVersion: defined?(Rails) ? Rails.version : nil,
+          railsVersion: defined?(Rails) && Rails.respond_to?(:version) ? Rails.version : nil,
           rackVersion: defined?(Rack) ? Rack.release : nil,
           platform: RUBY_PLATFORM
         }.compact
@@ -44,6 +44,9 @@ module Logister
     end
 
     def trace_context(headers:, env:)
+      current = Logister::ContextStore.trace_context
+      return current.to_h.merge(trace: {traceId: current.trace_id, spanId: current.span_id, requestId: current.request_id}) if current
+
       traceparent = header_value(headers, "Traceparent")
       b3_trace_id = header_value(headers, "X-B3-Traceid")
       b3_span_id = header_value(headers, "X-B3-Spanid")
@@ -196,15 +199,9 @@ module Logister
     def parse_traceparent(traceparent)
       return [ nil, nil, nil ] if traceparent.to_s.empty?
 
-      parts = traceparent.to_s.split("-")
-      return [ nil, nil, nil ] unless parts.size == 4
-
-      trace_id = parts[1].to_s
-      span_id = parts[2].to_s
-      flags = parts[3].to_s
-      sampled = flags.end_with?("01")
-
-      [ trace_id.presence, span_id.presence, sampled ]
+      parsed = Logister::TraceContext.parse(traceparent)
+      return [nil, nil, nil] unless parsed
+      [parsed[:trace_id], parsed[:parent_span_id], (parsed[:flags].to_i(16) & 1) == 1]
     rescue StandardError
       [ nil, nil, nil ]
     end
