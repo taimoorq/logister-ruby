@@ -15,24 +15,23 @@ module Logister
 
       included do
         around_perform do |job, block|
-          Logister::ContextStore.reset_request_scope!
-          Logister.add_breadcrumb(
-            category: "job",
-            message: "Starting #{job.class.name}",
-            data: { queue: job.queue_name, jobId: job.job_id }
-          )
-          started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-
-          begin
-            block.call
-          rescue StandardError => error
-            Logister.report_error(
-              error,
-              context: Logister::ActiveJobReporter.build_job_error_context(job, started_at: started_at)
+          Logister::ContextStore.with_request_scope do
+            Logister.add_breadcrumb(
+              category: "job",
+              message: "Starting #{job.class.name}",
+              data: { queue: job.queue_name, jobId: job.job_id }
             )
-            raise
-          ensure
-            Logister::ContextStore.reset_request_scope!
+            started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+            begin
+              block.call
+            rescue StandardError => error
+              Logister.report_error(
+                error,
+                context: Logister::ActiveJobReporter.build_job_error_context(job, started_at: started_at)
+              )
+              raise
+            end
           end
         end
       end

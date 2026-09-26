@@ -1,6 +1,17 @@
 require "test_helper"
 require "action_controller"
+require "active_job"
+require "logister/active_job_reporter"
 require "rack/mock"
+
+class CorrelationJob < ActiveJob::Base
+  self.logger = Logger.new(StringIO.new)
+
+  def perform
+    Logister.add_breadcrumb(category: "job", message: "inline job")
+    Logister.add_dependency(name: "inline dependency")
+  end
+end
 
 class CorrelationController < ActionController::Base
   def show
@@ -8,23 +19,39 @@ class CorrelationController < ActionController::Base
     Logister.report_error(RuntimeError.new("handled request failure"))
     render plain: "ok"
   end
+
+  def inline
+    CorrelationJob.perform_now
+    show
+  end
 end
 
 class TraceContextTest < Minitest::Test
   HEADER = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 
   def test_real_controller_notification_and_telemetry_share_one_request_context
+    assert_controller_correlation("show")
+  end
+
+  def test_real_controller_notification_and_telemetry_keep_request_context_after_inline_job
+    Logister::ActiveJobReporter.install!
+    assert_controller_correlation("inline")
+  end
+
+  def assert_controller_correlation(action)
     Logister.configuration.capture_request_spans = true
     Logister::RequestSubscriber.install!
     events = []
     transport = Logister.reporter.instance_variable_get(:@client)
     transport.define_singleton_method(:publish) { |payload| events << payload; true }
     routes = ActionDispatch::Routing::RouteSet.new
-    routes.draw { get "/correlation", to: "correlation#show" }
+    routes.draw { get "/correlation", to: "correlation##{action}" }
     app = Logister::Middleware.new(routes)
     response = Rack::MockRequest.new(app).get("/correlation", "HTTP_TRACEPARENT" => HEADER, "HTTP_X_REQUEST_ID" => "request-1")
     assert_equal 200, response.status
+    assert_equal "request-1", response.headers["x-request-id"]
     assert_nil Logister.current_trace_context
+    assert_nil Logister::ContextStore.request_summary("request-1")
     assert_equal %w[error log span], events.map { |event| event[:event_type] }.sort
     contexts = events.map { |event| event[:context] }
     assert_equal ["4bf92f3577b34da6a3ce929d0e0e4736"], contexts.map { |context| context[:trace_id] }.uniq

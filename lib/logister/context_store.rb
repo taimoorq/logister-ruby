@@ -12,6 +12,16 @@ module Logister
       }
     end
 
+    # Jobs may run inline inside a request or another job. Keep the complete
+    # caller scope intact while collecting this execution's telemetry separately.
+    def with_request_scope
+      previous_scope = Thread.current[REQUEST_SCOPE_KEY]
+      reset_request_scope!
+      yield
+    ensure
+      Thread.current[REQUEST_SCOPE_KEY] = previous_scope
+    end
+
     def add_breadcrumb(category:, message:, data: {}, level: "info", timestamp: Time.now.utc.iso8601)
       scope = request_scope
       breadcrumbs = scope[:breadcrumbs]

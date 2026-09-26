@@ -1,6 +1,29 @@
 require_relative "test_helper"
+require "rack/mock"
 
 class MiddlewareTest < Minitest::Test
+  def test_response_identity_survives_ambient_scope_reset_or_replacement
+    [nil, Logister::TraceContext.new(request_id: "other-request")].each do |replacement|
+      captured = nil
+      middleware = Logister::Middleware.new(lambda do |env|
+        captured = env["logister.trace_context"]
+        Logister::ContextStore.store_request_summary(captured.request_id, { status: 202 })
+        Logister::ContextStore.reset_request_scope!
+        Logister::ContextStore.trace_context = replacement
+        [202, {}, []]
+      end)
+
+      status, headers, = middleware.call(Rack::MockRequest.env_for("https://example.com/"))
+
+      assert_equal 202, status
+      assert_equal captured.request_id, headers["x-request-id"]
+      assert_nil Logister::ContextStore.request_summary(captured.request_id)
+      assert_nil Logister.current_trace_context
+      assert_empty Logister::ContextStore.breadcrumbs
+      assert_empty Logister::ContextStore.dependencies
+    end
+  end
+
   def test_middleware_reports_unhandled_exceptions_with_request_context
     middleware = Logister::Middleware.new(lambda { |_env| raise StandardError, "boom" })
 
