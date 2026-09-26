@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.1 - 2026-09-26
+
+- Restore the enclosing request or job scope after inline and nested Active Job executions, including failures, preserving request tracing, breadcrumbs, and dependencies while keeping job telemetry isolated.
+- Capture request identity before invoking the Rack app so response headers stay stable if ambient context changes; clear request summaries using that captured identity during cleanup.
+
 ## v0.5.0 - 2026-09-24
 
 - Propagate W3C request context through Rack and Rails, including logs, errors, transactions, and server spans.
