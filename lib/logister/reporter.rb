@@ -2,7 +2,6 @@
 
 require 'digest'
 require 'time'
-require 'set'
 require 'securerandom'
 require_relative 'context_helpers'
 require_relative 'context_store'
@@ -35,12 +34,6 @@ module Logister
       # always returns a new String — do it exactly once here.
       app_root = Dir.pwd.to_s.freeze
       @app_root_re = /\A#{Regexp.escape(app_root)}\//.freeze
-
-      # Register shutdown hook. Guard with a flag so multiple Reporter instances
-      # (created by repeated Logister.configure calls) each shut down cleanly
-      # without re-registering more handlers.
-      @shutdown_registered = false
-      register_shutdown_hook
     end
 
     def report_error(exception, context: {}, tags: {}, level: 'error', fingerprint: nil)
@@ -67,6 +60,8 @@ module Logister
       return false unless payload
 
       @client.publish(payload)
+    rescue StandardError => e
+      internal_failure(e)
     end
 
     def report_metric(message:, value: nil, unit: nil, level: 'info', context: {}, tags: {}, fingerprint: nil)
@@ -99,6 +94,8 @@ module Logister
       return false unless payload
 
       @client.publish(payload)
+    rescue StandardError => e
+      internal_failure(e)
     end
 
     def report_transaction(name:, duration_ms:, level: 'info', context: {}, tags: {}, fingerprint: nil, status: nil)
@@ -123,6 +120,8 @@ module Logister
       return false unless payload
 
       @client.publish(payload)
+    rescue StandardError => e
+      internal_failure(e)
     end
 
     def report_span(
@@ -186,6 +185,8 @@ module Logister
       return false unless payload
 
       @client.publish(payload)
+    rescue StandardError => e
+      internal_failure(e)
     end
 
     def report_log(message:, level: 'info', context: {}, tags: {}, fingerprint: nil)
@@ -205,6 +206,8 @@ module Logister
       return false unless payload
 
       @client.publish(payload)
+    rescue StandardError => e
+      internal_failure(e)
     end
 
     def report_check_in(
@@ -245,6 +248,8 @@ module Logister
       return false unless payload
 
       @client.publish(payload)
+    rescue StandardError => e
+      internal_failure(e)
     end
 
     def record_deployment(
@@ -281,20 +286,24 @@ module Logister
       }.compact
 
       @client.publish_deployment(payload)
+    rescue StandardError => e
+      internal_failure(e)
     end
 
-    # Store user info for the current thread so it is automatically attached to
-    # every error reported during this request.
+    # Store user info in the current request scope so it is attached to every
+    # error reported during this request or job. The middleware and Active Job
+    # integration reset the scope, so identity never carries to the next unit of
+    # work on a reused thread.
     #
     #   Logister.set_user(id: current_user.id, email: current_user.email, name: current_user.name)
     #
     def set_user(id: nil, email: nil, name: nil, **extra)
       ctx = { id: id, email: email, name: name }.merge(extra).compact
-      Thread.current[:logister_user] = ctx.empty? ? nil : ctx
+      Logister::ContextStore.user = ctx.empty? ? nil : ctx
     end
 
     def clear_user
-      Thread.current[:logister_user] = nil
+      Logister::ContextStore.user = nil
     end
 
     def flush(timeout: 2)
@@ -311,18 +320,13 @@ module Logister
 
     private
 
-    def register_shutdown_hook
-      return if @shutdown_registered
-
-      @shutdown_registered = true
-      # Capture @client directly (not self) so the at_exit proc does not
-      # retain the entire Reporter in the finalizer chain.
-      client = @client
-      at_exit { client.shutdown }
+    def current_user_context
+      Logister::ContextStore.user
     end
 
-    def current_user_context
-      Thread.current[:logister_user]
+    def internal_failure(error)
+      Logister.log_internal_error('report', error)
+      false
     end
 
     def default_error_context
@@ -335,7 +339,7 @@ module Logister
           .merge(Logister::ContextHelpers.deployment_context)
       )
     rescue StandardError => e
-      @configuration.logger.warn("logister default error context failed: #{e.class} #{e.message}")
+      Logister.log_internal_error('default error context', e)
       {}
     end
 
@@ -360,7 +364,7 @@ module Logister
         # Merge static config context last so caller-supplied keys are not
         # overwritten, then merge the static values. The static_context Hash
         # is frozen and reused — only the new outer Hash is allocated.
-        context:     @static_context.merge(Logister::ContextStore.trace_context&.to_h || {}).merge(context)
+        context:     @static_context.merge(Logister::ContextStore.trace_context.to_h).merge(context)
       }
     end
 
@@ -377,7 +381,7 @@ module Logister
 
       result
     rescue StandardError => e
-      @configuration.logger.warn("logister before_notify failed: #{e.class} #{e.message}")
+      Logister.log_internal_error('before_notify', e)
       nil
     end
 

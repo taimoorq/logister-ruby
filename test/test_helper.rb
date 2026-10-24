@@ -36,6 +36,13 @@ class Minitest::Test
       config.feature_flags_resolver = nil
       config.dependency_resolver = nil
       config.anonymize_ip = false
+      config.redact_keys = []
+      config.capture_headers = []
+      config.max_event_bytes = 256 * 1024
+      config.sync_max_retries = 1
+      config.capture_sql_breadcrumbs = false
+      config.batch_endpoint = nil
+      config.deployment_endpoint = nil
     end
 
     Logister::ContextStore.reset_request_scope!
@@ -45,6 +52,5 @@ class Minitest::Test
   def teardown
     Logister.shutdown
     Logister::ContextStore.reset_request_scope!
-    Thread.current[:logister_user] = nil
   end
 end

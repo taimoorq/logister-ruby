@@ -43,6 +43,16 @@ module Logister
       request_scope[:trace_context] = value
     end
 
+    # User identity lives in the request scope so resetting the scope at the end
+    # of a request or job also clears it.
+    def user
+      request_scope[:user]
+    end
+
+    def user=(value)
+      request_scope[:user] = value
+    end
+
     def breadcrumbs
       request_scope[:breadcrumbs].dup
     end

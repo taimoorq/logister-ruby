@@ -1,5 +1,3 @@
-require "logger"
-
 module Logister
   class RequestSubscriber
     IGNORED_SQL_NAMES = %w[SCHEMA TRANSACTION].freeze
@@ -57,7 +55,7 @@ module Logister
 
         report_request_span(payload, request_id) if capture_request_spans?
       rescue StandardError => e
-        logger.warn("logister request subscriber (process_action) failed: #{e.class} #{e.message}")
+        Logister.log_internal_error("request subscriber (process_action)", e)
       end
 
       def report_request_span(payload, request_id)
@@ -110,11 +108,11 @@ module Logister
           message: "#{sql_name} query",
           data: {
             durationMs: duration_ms,
-            sql: payload[:sql].to_s[0, 250]
+            sql: Logister::Redaction.strip_sql_literals(payload[:sql])[0, 250]
           }
         )
       rescue StandardError => e
-        logger.warn("logister request subscriber (sql breadcrumb) failed: #{e.class} #{e.message}")
+        Logister.log_internal_error("request subscriber (sql breadcrumb)", e)
       end
 
       def numeric(value)
@@ -135,12 +133,6 @@ module Logister
         configuration&.capture_request_spans
       rescue StandardError
         false
-      end
-
-      def logger
-        configuration&.logger || Logger.new($stdout)
-      rescue StandardError
-        Logger.new($stdout)
       end
     end
   end

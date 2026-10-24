@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.6.0 - 2026-10-23
+
+Security hardening. Several defaults change; review before upgrading.
+
+- Added the shared Logister redaction spec. Values of sensitive keys become `"[REDACTED]"`; `Bearer`/`Basic` credentials, JWTs, `lgst_` keys, and sensitive `name=value` pairs are scrubbed from strings. It applies to the message and the whole context (URL, referer, headers, params, user, tags, breadcrumbs, dependencies, job arguments, span attributes, log fields, exception data), never to envelope identifiers. Add keys with `config.redact_keys`.
+- **Changed default:** request headers are captured from an allowlist instead of a five-entry denylist, so `Proxy-Authorization`, `X-Auth-Token`, `X-Amz-Security-Token`, vendor signature headers, and similar are no longer sent. Add headers with `config.capture_headers`; sensitive names are still redacted.
+- Redacted sensitive query values and userinfo passwords in the captured request URL and referer, and dropped fragments.
+- `anonymize_ip` now also truncates `X-Forwarded-For` and `X-Real-Ip`.
+- **Changed default:** `capture_sql_breadcrumbs` is now `false`. When enabled, and for `capture_db_metrics`, string and numeric SQL literals are replaced with `?`.
+- `set_user` now stores the user in the request scope that the middleware and Active Job integration reset, fixing cross-request user attribution on reused threads. Added `Logister.set_user` and `Logister.clear_user`.
+- The middleware no longer lets a context-building or reporting failure replace the application's exception, and it now works on plain Rack without Action Dispatch (parameters are omitted there).
+- Telemetry never raises into the host: public `Logister.*` methods, the Active Job hook, and subscribers catch and log their own failures.
+- Only transport failures (timeouts, `IOError`, `SocketError`, `OpenSSL::SSL::SSLError`, `Errno::*`) and HTTP 408/425/429/5xx are retried.
+- Each event is sanitized and serialized individually before batching: invalid UTF-8 is scrubbed, non-finite floats become strings, and an event that cannot be serialized is dropped alone (`serialization_error`) instead of failing its whole batch after retries.
+- Bounded every event: strings at 16 KB, collections at 100 items, depth at 10, 400 keys, and `config.max_event_bytes` (default 256 KB) overall, with a compact second pass before dropping (`event_too_large`).
+- Synchronous delivery and deployment records use `config.sync_max_retries` (default 1) with waits capped at one second, instead of the background retry budget.
+- The client remembers an unsupported batch endpoint instead of retrying it before every fallback.
+- `Logister.configure` now shuts down the previous client, and a single `at_exit` hook flushes the current reporter.
+- The client warns when an endpoint uses `http://` on a non-loopback host.
+- Internal warnings log only error classes, never exception messages.
+
 ## v0.5.1 - 2026-09-26
 
 - Restore the enclosing request or job scope after inline and nested Active Job executions, including failures, preserving request tracing, breadcrumbs, and dependencies while keeping job telemetry isolated.

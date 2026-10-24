@@ -161,7 +161,7 @@ class ReporterTest < Minitest::Test
   def nested_error
     begin
       raise ArgumentError, "inner failure"
-    rescue ArgumentError => e
+    rescue ArgumentError
       raise RuntimeError, "outer failure"
     end
   rescue RuntimeError => e
