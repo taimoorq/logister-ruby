@@ -21,12 +21,12 @@ module Logister
 
     def deployment_context
       config = Logister.configuration if Logister.respond_to?(:configuration)
-      environment = config&.respond_to?(:environment) ? config.environment.to_s.presence : nil
-      service = config&.respond_to?(:service) ? config.service.to_s.presence : nil
-      release = config&.respond_to?(:release) ? config.release.to_s.presence : nil
-      repository = config&.respond_to?(:repository) ? config.repository.to_s.presence : nil
-      commit_sha = config&.respond_to?(:commit_sha) ? config.commit_sha.to_s.presence : nil
-      branch = config&.respond_to?(:branch) ? config.branch.to_s.presence : nil
+      environment = config.respond_to?(:environment) ? config.environment.to_s.presence : nil
+      service = config.respond_to?(:service) ? config.service.to_s.presence : nil
+      release = config.respond_to?(:release) ? config.release.to_s.presence : nil
+      repository = config.respond_to?(:repository) ? config.repository.to_s.presence : nil
+      commit_sha = config.respond_to?(:commit_sha) ? config.commit_sha.to_s.presence : nil
+      branch = config.respond_to?(:branch) ? config.branch.to_s.presence : nil
 
       {
         deployment: {
@@ -105,7 +105,7 @@ module Logister
 
         "#{segments[0]}.#{segments[1]}.#{segments[2]}.0"
       else
-        "#{parsed.mask(64).to_s}/64"
+        "#{parsed.mask(64)}/64"
       end
     rescue StandardError
       ip.to_s

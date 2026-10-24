@@ -122,9 +122,14 @@ Logister.configure do |config|
   config.anonymize_ip = false
   config.max_breadcrumbs = 40
   config.max_dependencies = 20
-  config.capture_sql_breadcrumbs = true
+  config.capture_sql_breadcrumbs = false # default; literals are stripped when enabled
   config.sql_breadcrumb_min_duration_ms = 25.0
   config.capture_request_spans = true
+
+  # Redaction and payload bounds (see "Filtering and redaction")
+  config.redact_keys = []        # extra sensitive keys, e.g. ["tenant_ref"]
+  config.capture_headers = []    # extra request headers to capture
+  config.max_event_bytes = 262_144
 
   config.feature_flags_resolver = lambda do |request:, user:, **|
     { new_checkout: user&.respond_to?(:beta?) && user.beta? }
@@ -136,7 +141,9 @@ Logister.configure do |config|
 end
 ```
 
-If you are using a self-hosted Logister install, point `config.endpoint` at your own Logister host instead of `logister.org`.
+If you are using a self-hosted Logister install, point `config.endpoint` at your own Logister host instead of `logister.org`. Use HTTPS: the client logs a warning when an endpoint uses `http://` on a host other than `localhost` or a loopback address, because the API key and events would travel unencrypted.
+
+Calling `Logister.configure` again replaces the reporter. The previous client drains what it already queued and stops, and one `at_exit` hook flushes whichever reporter is current when the process exits.
 
 Keep `LOGISTER_API_KEY` in your deployment secret store. Project API keys are write-only ingest credentials, but exposing one still lets another party submit unwanted telemetry to the project.
 
@@ -150,17 +157,36 @@ Logister.configure do |config|
   config.batch_interval = 0.05
   config.batch_compression = true
   config.max_retries = 3
+  config.sync_max_retries = 1
   config.retry_base_interval = 0.5
   config.max_retry_delay = 30.0
   config.retry_jitter = 0.2
 end
 ```
 
+Only transport failures are retried: timeouts, `IOError`, `SocketError`,
+`OpenSSL::SSL::SSLError`, `Errno::*`, and HTTP `408`, `425`, `429`, or `5xx`
+responses. Any other error fails the attempt once.
+
+With `config.async = false`, delivery runs on the caller's thread, so it uses
+`sync_max_retries` (default `1`, never more than `max_retries`) and caps each
+wait at one second. Deployment records are always sent this way.
+
+Each event is sanitized and serialized on its own before it is batched. Invalid
+UTF-8 is replaced, `NaN`/`Infinity` become strings, strings are truncated at
+16 KB, collections at 100 items, nesting at 10 levels, and each event at 400
+keys, with `logister_truncated: true` added to the context when anything was
+cut. An event larger than `max_event_bytes` (default 256 KB) after a second,
+tighter pass is dropped and counted as unconfirmed with reason
+`event_too_large`; an event that cannot be serialized is dropped with reason
+`serialization_error`. Neither affects the other events in its batch.
+
 Asynchronous delivery assigns a UUID before enqueueing, combines queued events into
 gzip/NDJSON batches, and retries the same identifiers. This makes a whole-batch retry
 safe against a Logister server that supports the batch endpoint. Older servers are
 detected automatically and receive the same stable events through the single-event
-endpoint. Call `Logister.flush` before a short-lived process exits.
+endpoint; the client remembers that answer for its lifetime instead of retrying
+the batch endpoint every time. Call `Logister.flush` before a short-lived process exits.
 
 ### Delivery outcomes
 
@@ -185,6 +211,56 @@ Retryable responses honor `Retry-After` when present, cap any individual wait at
 `max_retry_delay`, and add bounded positive jitter controlled by `retry_jitter`.
 
 ## Filtering and redaction
+
+Every event is redacted in the client before it is serialized, using the default
+spec shared by all Logister SDKs:
+
+- **Sensitive keys.** A key is sensitive when, lowercased with every
+  non-alphanumeric character removed, it equals one of `password`, `passwd`,
+  `pwd`, `secret`, `token`, `apikey`, `authorization`, `proxyauthorization`,
+  `cookie`, `setcookie`, `sessiontoken`, `sessionkey`, `credential`,
+  `credentials`, `privatekey`, `clientsecret`, `accesstoken`, `refreshtoken`,
+  `idtoken`, `authtoken`, `xapikey`, `xauthtoken`, `xaccesstoken`,
+  `xcsrftoken`, `xxsrftoken`, `signature`, `ssn`, `creditcard`, `cardnumber`,
+  or `cvv`, or when it contains `token`, `secret`, `password`, `passwd`,
+  `apikey`, `authorization`, `credential`, or `cookie`. The whole value becomes
+  `"[REDACTED]"`.
+- **Credential-shaped strings.** `Bearer <x>` and `Basic <x>` become
+  `Bearer [REDACTED]` / `Basic [REDACTED]`; JWT-shaped strings and `lgst_` keys
+  become `[REDACTED]`; a `name=value` pair with a sensitive name keeps its name.
+- **URLs.** The captured request URL and referer keep scheme, host, and path;
+  sensitive query values and userinfo passwords become `[REDACTED]` and the
+  fragment is dropped.
+
+Redaction covers the message and the whole context: request URL, referer,
+headers, params, user context, tags, breadcrumbs, dependency calls, job
+arguments (after Rails `filter_parameters`), span attributes, log fields, and
+exception data. SDK envelope fields such as `uuid`, `event_type`, `trace_id`,
+`span_id`, `parent_span_id`, `request_id`, and `session_id` are never redacted.
+
+Add project-specific keys with `config.redact_keys`. Entries are normalized the
+same way and must match exactly:
+
+```ruby
+Logister.configure do |config|
+  config.redact_keys = ["tenant_ref", "X-Internal-Signature"]
+end
+```
+
+Request headers are captured from an allowlist: `Accept`, `Accept-Encoding`,
+`Accept-Language`, `Cache-Control`, `Content-Length`, `Content-Type`, `Dnt`,
+`Host`, `Origin`, `Referer`, `User-Agent`, `Via`, W3C, B3, Datadog, and AWS trace
+headers, `X-Request-Id`, `X-Forwarded-For/Host/Proto/Port`, `X-Real-Ip`, and
+`Sec-Fetch-*`/`Sec-Ch-Ua*` hints. Add headers with
+`config.capture_headers = ["X-Tenant"]`; the sensitive-key rule still applies,
+so a header such as `X-Auth-Token` is captured as `[REDACTED]`. With
+`config.anonymize_ip = true`, the client IP and every address in
+`X-Forwarded-For` and `X-Real-Ip` are truncated (`/24` for IPv4, `/64` for IPv6).
+
+Telemetry never raises into your application. The public `Logister.*` methods,
+the Rack middleware, the Active Job hook, and the SQL and request subscribers
+catch their own failures, log the error class through `config.logger`, and
+re-raise only the application's original exception.
 
 ```ruby
 Logister.configure do |config|
@@ -211,7 +287,16 @@ This is especially important when a Rails application reports into a Logister pr
 
 ## Rails auto-reporting
 
-If Rails is present, the gem installs middleware that reports unhandled exceptions automatically. It attaches trace IDs, route and response data, performance context, breadcrumbs, dependency calls, and user metadata when available.
+If Rails is present, the gem installs middleware that reports unhandled exceptions automatically. Plain Rack apps can add it themselves:
+
+```ruby
+# config.ru
+require "logister"
+use Logister::Middleware
+run MyApp
+```
+
+Without Action Dispatch the middleware uses `Rack::Request` and omits request parameters, because there is no host parameter filter; the redacted URL still records the query string. It attaches trace IDs, route and response data, performance context, breadcrumbs, dependency calls, and user metadata when available.
 
 Set `config.capture_request_spans = true` to emit root `server` spans for request-load waterfall charts while keeping the existing transaction events. Manual `Logister.report_error` calls use the same enrichment path, including runtime, deployment, breadcrumb, dependency, user, and nested-exception context.
 
@@ -227,7 +312,7 @@ Logister.configure do |config|
 end
 ```
 
-This emits metric events with `message: "db.query"` and context fields such as `duration_ms`, `name`, `sql`, and `binds_count`.
+This emits metric events with `message: "db.query"` and context fields such as `duration_ms`, `name`, `sql`, and `binds_count`. String and numeric literals are replaced with `?` in the captured `sql`, so inlined values such as password hashes or reset tokens are not sent; bind placeholders like `$1` and quoted identifiers are kept.
 
 ## Breadcrumbs and dependencies
 
@@ -250,7 +335,7 @@ Logister.add_dependency(
 )
 ```
 
-The gem also captures request and SQL breadcrumbs automatically in Rails.
+The gem also captures request breadcrumbs automatically in Rails. SQL breadcrumbs are off by default because adapters without prepared statements inline literal values; set `config.capture_sql_breadcrumbs = true` to record queries slower than `sql_breadcrumb_min_duration_ms`, with string and numeric literals replaced by `?`.
 
 ## ActiveJob error context
 
@@ -261,6 +346,18 @@ Failed ActiveJob executions are auto-reported with `job` context:
 - breadcrumbs/dependency calls collected during the job
 
 ## Manual reporting
+
+Attach the signed-in user to errors reported during the current request or job:
+
+```ruby
+Logister.set_user(id: current_user.id, email: current_user.email, name: current_user.name)
+Logister.clear_user
+```
+
+The user is stored in the request scope, which the Rack middleware and the
+Active Job integration reset when each request or job ends, so identity never
+carries over to the next request on a reused Puma or Sidekiq thread. In other
+long-lived threads, call `Logister.clear_user` when the unit of work ends.
 
 ```ruby
 Logister.report_error(StandardError.new("Something failed"), tags: { area: "checkout" })

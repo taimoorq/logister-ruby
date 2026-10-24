@@ -26,10 +26,7 @@ module Logister
             begin
               block.call
             rescue StandardError => error
-              Logister.report_error(
-                error,
-                context: Logister::ActiveJobReporter.build_job_error_context(job, started_at: started_at)
-              )
+              Logister::ActiveJobReporter.report_job_error(job, error, started_at: started_at)
               raise
             end
           end
@@ -39,7 +36,16 @@ module Logister
 
     module_function
 
-    def build_job_error_context(job, started_at:)
+    # Context building and reporting run in their own rescue so a telemetry
+    # failure can never replace the job's exception.
+    def report_job_error(job, error, started_at:)
+      Logister.report_error(error, context: build_job_error_context(job, started_at: started_at))
+    rescue StandardError => e
+      Logister.log_internal_error('job error report', e)
+      nil
+    end
+
+    def build_job_error_context(job, started_at: nil) # rubocop:disable Lint/UnusedMethodArgument
       Logister::ContextHelpers.compact_deep(
         {
           job: {

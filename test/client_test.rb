@@ -159,7 +159,7 @@ class ClientTest < Minitest::Test
     client.define_singleton_method(:send_batch_request) do |_batch|
       raise Logister::Client::UnsupportedBatchEndpoint, "HTTP 404"
     end
-    client.define_singleton_method(:publish_sync) do |event|
+    client.define_singleton_method(:publish_single) do |event|
       delivered_ids << event.fetch(:uuid)
       true
     end
@@ -179,7 +179,7 @@ class ClientTest < Minitest::Test
     client.define_singleton_method(:send_batch_request) do |_batch|
       raise Logister::Client::UnsupportedBatchEndpoint, "HTTP 404"
     end
-    client.define_singleton_method(:publish_sync) do |event|
+    client.define_singleton_method(:publish_single) do |event|
       attempted << event.fetch(:uuid)
       event.fetch(:message) != "one"
     end
@@ -271,7 +271,7 @@ class ClientTest < Minitest::Test
     assert_equal client.send(:batch_id, payloads), captured_request["X-Logister-Batch-Id"]
 
     envelopes = Zlib.gunzip(captured_request.body).lines.map { |line| JSON.parse(line) }
-    assert_equal payloads.map { |payload| payload[:uuid] }, envelopes.map { |row| row.fetch("event").fetch("uuid") }
+    assert_equal(payloads.map { |payload| payload[:uuid] }, envelopes.map { |row| row.fetch("event").fetch("uuid") })
   ensure
     if net_http_singleton&.method_defined?(:start)
       net_http_singleton.remove_method :start

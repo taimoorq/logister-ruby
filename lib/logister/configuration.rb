@@ -10,7 +10,8 @@ module Logister
                   :capture_db_metrics, :db_metric_min_duration_ms, :db_metric_sample_rate,
                   :feature_flags_resolver, :dependency_resolver, :anonymize_ip,
                   :max_breadcrumbs, :max_dependencies, :capture_request_spans,
-                  :capture_sql_breadcrumbs, :sql_breadcrumb_min_duration_ms, :delivery_observer
+                  :capture_sql_breadcrumbs, :sql_breadcrumb_min_duration_ms, :delivery_observer,
+                  :redact_keys, :capture_headers, :max_event_bytes, :sync_max_retries
     attr_writer :deployment_endpoint, :batch_endpoint
 
     def initialize
@@ -37,6 +38,7 @@ module Logister
       @async = true
       @queue_size = 1000
       @max_retries = 3
+      @sync_max_retries = 1
       @retry_base_interval = 0.5
       @max_retry_delay = 30.0
       @retry_jitter = 0.2
@@ -54,8 +56,12 @@ module Logister
       @max_breadcrumbs = 40
       @max_dependencies = 20
       @capture_request_spans = false
-      @capture_sql_breadcrumbs = true
+      @capture_sql_breadcrumbs = false
       @sql_breadcrumb_min_duration_ms = 25.0
+
+      @redact_keys = []
+      @capture_headers = []
+      @max_event_bytes = 256 * 1024
     end
 
     def deployment_endpoint

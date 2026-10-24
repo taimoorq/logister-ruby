@@ -53,14 +53,14 @@ module Logister
           context: {
             duration_ms: duration_ms.round(2),
             name:        sql_name,
-            sql:         payload[:sql].to_s,
+            sql:         Logister::Redaction.strip_sql_literals(payload[:sql]),
             cached:      false,
             binds_count: (payload[:binds] || []).size
           },
           tags: TAGS
         )
       rescue StandardError => e
-        config.logger.warn("logister sql subscriber failed: #{e.class} #{e.message}")
+        Logister.log_internal_error('sql subscriber', e)
       end
 
       def sampled_out?(sample_rate)

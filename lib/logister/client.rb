@@ -7,14 +7,46 @@ require 'securerandom'
 require 'time'
 require 'uri'
 require 'zlib'
+require 'ipaddr'
+begin
+  require 'openssl'
+rescue LoadError
+  nil
+end
+require_relative 'event_sanitizer'
+require_relative 'redaction'
 
 module Logister
   class Client
     CONTENT_TYPE = 'application/json'
     BATCH_CONTENT_TYPE = 'application/x-ndjson'
     UNSUPPORTED_BATCH_STATUSES = %w[404 405 415 501].freeze
+    RETRYABLE_STATUSES = [408, 425, 429].freeze
+    SYNC_MAX_RETRY_DELAY = 1.0
+    RETRYABLE_ERRORS = [
+      Timeout::Error, IOError, SocketError, SystemCallError,
+      (OpenSSL::SSL::SSLError if defined?(OpenSSL::SSL::SSLError))
+    ].compact.freeze
 
     class UnsupportedBatchEndpoint < StandardError; end
+
+    # One event serialized on its own before batching. A payload that cannot be
+    # encoded is dropped alone instead of failing every event batched with it.
+    class Event
+      attr_reader :uuid, :payload, :json
+
+      def initialize(uuid:, payload:, json:)
+        @uuid = uuid
+        @payload = payload
+        @json = json
+        freeze
+      end
+
+      def [](key) = payload[key]
+      def fetch(...) = payload.fetch(...)
+      def key?(key) = payload.key?(key)
+      def to_h = payload
+    end
 
     class RequestError < StandardError
       attr_reader :status, :retry_after
@@ -49,24 +81,34 @@ module Logister
       @batch_use_ssl  = @batch_uri.scheme == 'https'
       @deployment_use_ssl = @deployment_uri.scheme == 'https'
       @auth_header    = "Bearer #{@configuration.api_key}".freeze
+      @redact_keys    = Redaction.normalize_keys(@configuration.redact_keys)
+      @batch_unsupported = false
+      warn_insecure_endpoints
     end
 
     def publish(payload)
       return false if ReportingScope.suppressed?
       return false unless ready?
 
-      payload = with_stable_uuid(payload)
+      event = encode_event(with_stable_uuid(payload))
+      return false unless event
 
-      return publish_sync(payload) unless @configuration.async
+      return publish_sync(event) unless @configuration.async
 
       ensure_worker_started
-      enqueue(payload)
+      enqueue(event)
+    rescue StandardError => e
+      warn_internal("logister publish failed: #{e.class}")
+      false
     end
 
     def publish_deployment(payload)
       return false unless ready?
 
       publish_deployment_sync(payload)
+    rescue StandardError => e
+      warn_internal("logister deployment publish failed: #{e.class}")
+      false
     end
 
     def flush(timeout: 2)
@@ -122,7 +164,7 @@ module Logister
     rescue ThreadError
       complete_pending(1)
       record_delivery(:queue_full_events, 1, reason: 'queue_full')
-      @configuration.logger.warn('logister queue full; dropping event')
+      warn_internal('logister queue full; dropping event')
       false
     end
 
@@ -168,18 +210,27 @@ module Logister
         break if stop_after_batch || (@stopping && @queue.empty?)
       end
     rescue StandardError => e
-      @configuration.logger.warn("logister worker crashed: #{e.class} #{e.message}")
+      warn_internal("logister worker crashed: #{e.class}")
     ensure
       # Always clear running flag and attempt auto-restart after a crash so
       # events enqueued after the crash are not silently dropped.
       @running = false
     end
 
-    def publish_sync(payload)
+    # Synchronous mode delivers on the caller's thread, so it uses a small retry
+    # cap and short waits instead of the background worker's limits.
+    def publish_sync(event)
+      publish_single(event, max_retries: sync_max_retries, max_delay: SYNC_MAX_RETRY_DELAY)
+    end
+
+    def publish_single(event, max_retries: @configuration.max_retries.to_i, max_delay: nil)
+      event = coerce_event(event)
+      return false unless event
+
       attempts = 0
       begin
         attempts += 1
-        delivered = send_request(payload)
+        delivered = send_request(event)
         unless delivered
           record_delivery(:unconfirmed_events, 1, reason: 'no_acknowledgment')
           return false
@@ -187,19 +238,29 @@ module Logister
         record_delivery(:acknowledged_events, 1)
         true
       rescue StandardError => e
-        if attempts <= @configuration.max_retries && retryable_error?(e)
+        if attempts <= max_retries && retryable_error?(e)
           record_delivery(:retry_attempts, 1, reason: failure_reason(e))
-          sleep(retry_delay(e, attempts))
+          sleep(retry_delay(e, attempts, max_delay: max_delay))
           retry
         end
 
         record_delivery(:unconfirmed_events, 1, reason: failure_reason(e))
-        @configuration.logger.warn("logister publish failed: #{e.class}")
+        warn_internal("logister publish failed: #{e.class}")
         false
       end
     end
 
-    def publish_batch_sync(payloads)
+    def publish_batch_sync(items)
+      payloads = items.filter_map { |item| coerce_event(item) }
+      all_encoded = payloads.length == items.length
+      return all_encoded if payloads.empty?
+
+      deliver_batch(payloads) && all_encoded
+    end
+
+    def deliver_batch(payloads)
+      return publish_each(payloads) if @batch_unsupported
+
       attempts = 0
       begin
         attempts += 1
@@ -211,34 +272,31 @@ module Logister
         record_delivery(:acknowledged_events, payloads.length)
         true
       rescue UnsupportedBatchEndpoint
-        payloads.map { |payload| publish_sync(payload) }.all?
-      rescue RequestError => e
-        if e.status == 413 && payloads.length > 1
+        # Older servers keep this answer for the life of the client; stop paying
+        # for a failed batch request before every fallback.
+        @batch_unsupported = true
+        publish_each(payloads)
+      rescue StandardError => e
+        if e.is_a?(RequestError) && e.status == 413 && payloads.length > 1
           middle = (payloads.length / 2.0).ceil
-          first_half_delivered = publish_batch_sync(payloads.first(middle))
-          second_half_delivered = publish_batch_sync(payloads.drop(middle))
+          first_half_delivered = deliver_batch(payloads.first(middle))
+          second_half_delivered = deliver_batch(payloads.drop(middle))
           return first_half_delivered && second_half_delivered
         end
-        if attempts <= @configuration.max_retries && retryable_error?(e)
+        if attempts <= @configuration.max_retries.to_i && retryable_error?(e)
           record_delivery(:retry_attempts, 1, reason: failure_reason(e))
           sleep(retry_delay(e, attempts))
           retry
         end
 
         record_delivery(:unconfirmed_events, payloads.length, reason: failure_reason(e))
-        @configuration.logger.warn("logister batch publish failed: #{e.class}")
-        false
-      rescue StandardError => e
-        if attempts <= @configuration.max_retries && retryable_error?(e)
-          record_delivery(:retry_attempts, 1, reason: failure_reason(e))
-          sleep(retry_delay(e, attempts))
-          retry
-        end
-
-        record_delivery(:unconfirmed_events, payloads.length, reason: failure_reason(e))
-        @configuration.logger.warn("logister batch publish failed: #{e.class}")
+        warn_internal("logister batch publish failed: #{e.class}")
         false
       end
+    end
+
+    def publish_each(events)
+      events.map { |event| publish_single(event) }.all?
     end
 
     def publish_deployment_sync(payload)
@@ -247,21 +305,21 @@ module Logister
         attempts += 1
         send_deployment_request(payload)
       rescue StandardError => e
-        if attempts <= @configuration.max_retries && retryable_error?(e)
-          sleep(retry_delay(e, attempts))
+        if attempts <= sync_max_retries && retryable_error?(e)
+          sleep(retry_delay(e, attempts, max_delay: SYNC_MAX_RETRY_DELAY))
           retry
         end
 
-        @configuration.logger.warn("logister deployment publish failed: #{e.class} #{e.message}")
+        warn_internal("logister deployment publish failed: #{e.class}")
         false
       end
     end
 
-    def send_request(payload)
+    def send_request(event)
       request = Net::HTTP::Post.new(@uri)
       request['Content-Type']  = CONTENT_TYPE
       request['Authorization'] = @auth_header
-      request.body             = { event: payload }.to_json
+      request.body             = coerce_event!(event).json
 
       response = Net::HTTP.start(
         @uri.host,
@@ -277,13 +335,14 @@ module Logister
       raise request_error(response)
     end
 
-    def send_batch_request(payloads)
+    def send_batch_request(events)
+      events = events.map { |event| coerce_event!(event) }
       request = Net::HTTP::Post.new(@batch_uri)
       request['Content-Type'] = BATCH_CONTENT_TYPE
       request['Authorization'] = @auth_header
-      request['X-Logister-Batch-Id'] = batch_id(payloads)
+      request['X-Logister-Batch-Id'] = batch_id(events)
 
-      body = payloads.map { |payload| { event: payload }.to_json }.join("\n") << "\n"
+      body = events.map(&:json).join("\n") << "\n"
       if @configuration.batch_compression
         request['Content-Encoding'] = 'gzip'
         body = Zlib.gzip(body)
@@ -309,7 +368,7 @@ module Logister
       request = Net::HTTP::Post.new(@deployment_uri)
       request['Content-Type']  = CONTENT_TYPE
       request['Authorization'] = @auth_header
-      request.body             = { deployment: payload }.to_json
+      request.body             = JSON.generate({ deployment: EventSanitizer.call(payload, extra_keys: @redact_keys) })
 
       response = Net::HTTP.start(
         @deployment_uri.host,
@@ -369,9 +428,72 @@ module Logister
 
     def batch_id(payloads)
       identifiers = payloads.map do |payload|
+        next payload.uuid if payload.is_a?(Event)
+
         payload[:uuid] || payload['uuid'] || payload[:event_id] || payload['event_id']
       end
       Digest::SHA256.hexdigest(identifiers.join("\n"))
+    end
+
+    # Sanitizes, redacts, and serializes one event. Oversized events are retried
+    # with compact limits; an event that still cannot be encoded is dropped and
+    # counted without affecting any other event.
+    def encode_event(payload)
+      uuid = payload[:uuid] || payload['uuid']
+      [EventSanitizer::DEFAULT_LIMITS, EventSanitizer::COMPACT_LIMITS].each do |limits|
+        sanitized = EventSanitizer.call(payload, extra_keys: @redact_keys, limits: limits)
+        json = JSON.generate({ event: sanitized })
+        return Event.new(uuid: uuid.to_s, payload: sanitized, json: json) if json.bytesize <= max_event_bytes
+      end
+
+      record_delivery(:unconfirmed_events, 1, reason: 'event_too_large')
+      warn_internal('logister dropped an event larger than max_event_bytes')
+      nil
+    rescue StandardError => e
+      record_delivery(:unconfirmed_events, 1, reason: 'serialization_error')
+      warn_internal("logister could not serialize an event: #{e.class}")
+      nil
+    end
+
+    def coerce_event(item)
+      return item if item.is_a?(Event)
+
+      encode_event(with_stable_uuid(item))
+    end
+
+    def coerce_event!(item)
+      coerce_event(item) || raise(ArgumentError, 'event could not be encoded')
+    end
+
+    def max_event_bytes
+      [@configuration.max_event_bytes.to_i, 1024].max
+    end
+
+    def sync_max_retries
+      [[@configuration.sync_max_retries.to_i, 0].max, @configuration.max_retries.to_i].min
+    end
+
+    def warn_internal(message)
+      @configuration.logger&.warn(message)
+    rescue StandardError
+      nil
+    end
+
+    def warn_insecure_endpoints
+      [@uri, @batch_uri, @deployment_uri].uniq { |uri| [uri.host, uri.port] }.each do |uri|
+        next unless uri.scheme == 'http' && !loopback_host?(uri.host)
+
+        warn_internal("logister endpoint #{uri.scheme}://#{uri.host} is not HTTPS; the API key and events are sent unencrypted")
+      end
+    end
+
+    def loopback_host?(host)
+      name = host.to_s.downcase.delete_prefix('[').delete_suffix(']')
+      return true if name == 'localhost' || name.end_with?('.localhost')
+
+      IPAddr.new(name).loopback?
+    rescue ArgumentError
+      false
     end
 
     def batch_size
@@ -393,10 +515,12 @@ module Logister
       end
     end
 
+    # Only transport failures and transient HTTP statuses are retried; a bug or
+    # an unencodable payload fails once instead of being repeated.
     def retryable_error?(error)
-      return true unless error.is_a?(RequestError)
+      return RETRYABLE_STATUSES.include?(error.status) || error.status >= 500 if error.is_a?(RequestError)
 
-      [408, 425, 429].include?(error.status) || error.status >= 500
+      RETRYABLE_ERRORS.any? { |klass| error.is_a?(klass) }
     end
 
     def request_error(response)
@@ -415,8 +539,9 @@ module Logister
       nil
     end
 
-    def retry_delay(error, attempt)
+    def retry_delay(error, attempt, max_delay: nil)
       configured_cap = [@configuration.max_retry_delay.to_f, 0.0].max
+      configured_cap = [configured_cap, max_delay].min if max_delay
       base_delay = if error.is_a?(RequestError) && !error.retry_after.nil?
                      error.retry_after.to_f
                    else

@@ -13,6 +13,16 @@ customer data, or local Bundler configuration.
 - Keep Bundler and GitHub Actions Dependabot updates enabled. Pin Actions to
   full commit SHAs and retain a readable version comment.
 
+## Telemetry safety rules
+
+- The SDK must never raise into the host application. Public `Logister.*`
+  methods, the Rack middleware, the Active Job hook, and subscribers catch
+  their own failures and re-raise only the application's original exception.
+- Redaction follows the default spec shared by every Logister SDK
+  (`lib/logister/redaction.rb`, documented in the README). Change the key list
+  or value patterns only in step with the other SDKs; projects add keys through
+  `config.redact_keys`.
+
 ## Verification
 
 Run before handoff or release:

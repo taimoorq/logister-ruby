@@ -22,10 +22,18 @@ Logister.configure do |config|
   config.ignore_exceptions = []
   config.ignore_paths = []
 
+  # Values of sensitive keys (password, token, secret, authorization, cookie,
+  # and more) are always replaced with "[REDACTED]". Add project-specific keys.
+  config.redact_keys = []
+  # Request headers are captured from an allowlist; add extra header names here.
+  config.capture_headers = []
+
   # Optional ActiveRecord SQL instrumentation.
   config.capture_db_metrics = false
   config.db_metric_min_duration_ms = 10.0
   config.db_metric_sample_rate = 1.0
+  # SQL breadcrumbs are off by default; literals are stripped when enabled.
+  config.capture_sql_breadcrumbs = false
 
   config.before_notify = lambda do |payload|
     payload

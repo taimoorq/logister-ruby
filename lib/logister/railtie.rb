@@ -38,6 +38,14 @@ module Logister
         copy_setting(app, config, :capture_request_spans)
         copy_setting(app, config, :capture_sql_breadcrumbs)
         copy_setting(app, config, :sql_breadcrumb_min_duration_ms)
+        copy_setting(app, config, :redact_keys)
+        copy_setting(app, config, :capture_headers)
+        copy_setting(app, config, :max_event_bytes)
+        copy_setting(app, config, :sync_max_retries)
+        copy_setting(app, config, :delivery_observer)
+        copy_setting(app, config, :repository)
+        copy_setting(app, config, :commit_sha)
+        copy_setting(app, config, :branch)
       end
     end
 

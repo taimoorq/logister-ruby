@@ -51,8 +51,8 @@ class ActiveJobReporterTest < Minitest::Test
     assert_nested_request(fail_child: true)
     context = @events.fetch(0).fetch(:context)
     assert_equal "ScopeJob", context.dig(:job, :jobClass)
-    assert_equal ["inner"], context.fetch(:dependencyCalls).map { |entry| entry[:name] }
-    assert_equal ["Starting ScopeJob", "inner"], context.fetch(:breadcrumbs).map { |entry| entry[:message] }
+    assert_equal(["inner"], context.fetch(:dependencyCalls).map { |entry| entry[:name] })
+    assert_equal(["Starting ScopeJob", "inner"], context.fetch(:breadcrumbs).map { |entry| entry[:message] })
   end
 
   def test_rescued_inline_failure_keeps_redirect_and_request_telemetry
@@ -75,8 +75,8 @@ class ActiveJobReporterTest < Minitest::Test
     assert_equal 2, @events.size
     context = @events.last.fetch(:context)
     assert_equal "request-123", context[:request_id]
-    assert_equal ["request"], context.fetch(:breadcrumbs).map { |entry| entry[:message] }
-    assert_equal ["request"], context.fetch(:dependencyCalls).map { |entry| entry[:name] }
+    assert_equal(["request"], context.fetch(:breadcrumbs).map { |entry| entry[:message] })
+    assert_equal(["request"], context.fetch(:dependencyCalls).map { |entry| entry[:name] })
     assert_empty_scope
   end
 
@@ -94,15 +94,15 @@ class ActiveJobReporterTest < Minitest::Test
     job_context, request_context = @events.map { |event| event.fetch(:context) }
     assert_equal "ScopeJob", job_context.dig(:job, :jobClass)
     assert_nil job_context[:request_id]
-    assert_equal ["job"], job_context.fetch(:dependencyCalls).map { |entry| entry[:name] }
+    assert_equal(["job"], job_context.fetch(:dependencyCalls).map { |entry| entry[:name] })
     assert_equal "request-123", request_context[:request_id]
-    assert_equal ["request"], request_context.fetch(:breadcrumbs).map { |entry| entry[:message] }
-    assert_equal ["request"], request_context.fetch(:dependencyCalls).map { |entry| entry[:name] }
+    assert_equal(["request"], request_context.fetch(:breadcrumbs).map { |entry| entry[:message] })
+    assert_equal(["request"], request_context.fetch(:dependencyCalls).map { |entry| entry[:name] })
     assert_empty_scope
   end
 
   def test_non_standard_error_restores_the_enclosing_scope
-    failure = Class.new(Exception).new("interrupted")
+    failure = Class.new(Exception).new("interrupted") # rubocop:disable Lint/InheritException
     Logister::ContextStore.trace_context = Logister::TraceContext.new
     add_scope_data("parent")
     before = scope_snapshot
@@ -218,7 +218,7 @@ class ActiveJobReporterTest < Minitest::Test
 
   def assert_job_scope
     assert_nil Logister.current_trace_context
-    assert_equal ["Starting ScopeJob"], Logister::ContextStore.breadcrumbs.map { |entry| entry[:message] }
+    assert_equal(["Starting ScopeJob"], Logister::ContextStore.breadcrumbs.map { |entry| entry[:message] })
     assert_empty Logister::ContextStore.dependencies
   end
 
